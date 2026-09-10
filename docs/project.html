@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project format &middot; RoFlux</title>
+<link rel="icon" href="assets/RoFlux_icon_512.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav class="nav">
+	<div class="wrap nav-inner">
+		<a class="nav-logo" href="index.html"><img src="assets/RoFlux_wordmark.png" alt="RoFlux"></a>
+		<div class="nav-links">
+			<a href="getting-started.html">Get started</a>
+			<a href="project.html" class="active">Project format</a>
+			<a href="syncing.html">Syncing</a>
+			<a href="scripts.html">Scripts</a>
+			<a href="cli.html">CLI</a>
+			<a href="edge-cases.html">Edge cases</a>
+		</div>
+	</div>
+</nav>
+
+<div class="wrap docs">
+	<aside class="side">
+		<h5>Guides</h5>
+		<a href="getting-started.html">Getting started</a>
+		<a href="project.html" class="active">Project format</a>
+		<a href="syncing.html">How syncing works</a>
+		<a href="scripts.html">Script system</a>
+		<h5>Reference</h5>
+		<a href="cli.html">CLI commands</a>
+		<a href="edge-cases.html">Edge cases</a>
+		<h5>On this page</h5>
+		<a href="#manifest">default.project.json</a>
+		<a href="#places">Multiple places</a>
+		<a href="#root">Project root rules</a>
+		<a href="#metainst">meta.inst.json</a>
+		<a href="#files">How files map</a>
+		<a href="#folders">Folders and init</a>
+		<a href="#meta">Metadata files</a>
+		<a href="#directives">Directives</a>
+		<a href="#values">Property values</a>
+		<a href="#frommodel">$FromModel</a>
+		<a href="#path">$Path</a>
+		<a href="#sourcemap">The sourcemap</a>
+	</aside>
+
+	<main class="content">
+		<h1>Project format</h1>
+		<p class="lede">RoFlux describes a game with files rather than one large manifest. Files become instances, folders become containers, and small JSON files say where a tree belongs and what it is.</p>
+
+		<h2 id="manifest">default.project.json</h2>
+		<p>This file is deliberately small. It holds project info and lets you set properties on Roblox services. Everything else is expressed by files on disk.</p>
+<pre><code>{
+    <span class="tok-s">"ProjectID"</span>: <span class="tok-s">"Scope/Project"</span>,
+    <span class="tok-s">"Name"</span>: <span class="tok-s">"MyGame"</span>,
+    <span class="tok-s">"Default"</span>: <span class="tok-s">"ReplicatedStorage"</span>,
+
+    <span class="tok-s">"Lighting"</span>: {
+        <span class="tok-s">"ClockTime"</span>: 14,
+        <span class="tok-s">"Brightness"</span>: 2
+    },
+
+    <span class="tok-s">"ReplicatedStorage"</span>: {
+        <span class="tok-s">"Config"</span>: { <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Configuration"</span> }
+    }
+}</code></pre>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Key</th><th>Meaning</th></tr></thead>
+			<tbody>
+				<tr><td><code>ProjectID</code></td><td>An identifier for the project, sent to the plugin on connect.</td></tr>
+				<tr><td><code>Name</code></td><td>Name of the DataModel node in the sourcemap. Defaults to the folder name.</td></tr>
+				<tr><td><code>Default</code></td><td>Where top level trees go when they do not declare a <code>$Parent</code>.</td></tr>
+				<tr><td><code>Include</code></td><td>Only these top level folders compile. Leave it out to compile everything.</td></tr>
+				<tr><td><code>Exclude</code></td><td>These top level folders never compile.</td></tr>
+				<tr><td>anything else</td><td>Treated as a service path. Its <code>$Properties</code> are applied and its children are created.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>If there is no <code>default.project.json</code>, RoFlux warns and carries on with defaults.</p>
+
+		<h2 id="places">Multiple places from one repo</h2>
+		<p>A lot of games are more than one place. A lobby, a main game, a test map. They usually share code but each one only needs part of the tree.</p>
+		<p>Add an <code>Include</code> list to say which top level folders a place should compile:</p>
+<pre><code><span class="tok-c">-- lobby.project.json</span>
+{
+    <span class="tok-s">"ProjectID"</span>: <span class="tok-s">"MyGame/Lobby"</span>,
+    <span class="tok-s">"Name"</span>: <span class="tok-s">"Lobby"</span>,
+    <span class="tok-s">"Include"</span>: [<span class="tok-s">"Shared"</span>, <span class="tok-s">"Lobby"</span>]
+}</code></pre>
+		<p>Then point any command at it by name. RoFlux adds <code>.project.json</code> for you:</p>
+<pre><code>roflux serve lobby
+roflux build lobby --output Lobby.rbxl</code></pre>
+		<p>With no name at all you get <code>default.project.json</code>, so a single place project needs nothing extra.</p>
+		<p>With <code>Include</code> set, only those folders are scanned. Everything else on disk is left out of the tree, so it is never created in that place and never appears in that sourcemap. <code>Exclude</code> works the other way and drops folders from a build that would otherwise compile.</p>
+		<p>If neither is set, the whole project compiles as normal. This is opt in, so an existing project keeps working exactly as it did.</p>
+		<div class="note">
+			<strong>Both lists match top level folder names</strong>
+			<p>They filter what gets scanned at the project root. Once a folder is included, everything inside it compiles as usual. <code>meta.inst.json</code> is always read, because references only affect the sourcemap.</p>
+		</div>
+		<p>The services and children declared in the manifest itself are always part of that place, so each place file can also set its own service properties.</p>
+
+		<h2 id="root">Project root rules</h2>
+		<p>The top level of a project is special. Only two kinds of thing compile there:</p>
+		<ul>
+			<li><code>meta.inst.json</code></li>
+			<li>folders containing an <code>init.meta.json</code>, along with everything inside them</li>
+		</ul>
+		<p>Everything else loose at the root is ignored. That keeps a README, a Cargo file, a build script or a stray note from accidentally becoming an instance. <code>scripts/</code> is reserved for compile time hooks and is never scanned as content.</p>
+		<p><code>meta.inst.json</code> is the exception because it is the one place to describe instances that have no file of their own. It gets <a href="#metainst">its own section below</a>.</p>
+		<div class="note">
+			<strong>This rule applies only at the root</strong>
+			<p>Once inside a folder that does compile, every file in it is scanned normally, no <code>init.meta.json</code> required per level.</p>
+		</div>
+
+		<h2 id="metainst">meta.inst.json</h2>
+		<p>This is the one instance file that is allowed to sit in the main project folder, next to your project file. It is where you describe things that have no file of their own.</p>
+<pre><code>MyGame/
+├─ default.project.json
+├─ meta.inst.json      <span class="tok-c">-- right here, at the top</span>
+├─ scripts/
+├─ Shared/
+└─ Server/</code></pre>
+		<p>Everywhere else in a project, an instance comes from a file. A script is a <code>.luau</code> file, a folder is a folder on disk. But some instances do not belong to any file:</p>
+		<ul>
+			<li>content that already exists in the place and that you do not want RoFlux to manage, such as a map you built by hand</li>
+			<li>small empty instances that exist just to hold something, like a folder of remote events</li>
+		</ul>
+		<p>Both of those go in <code>meta.inst.json</code>.</p>
+
+		<h3>Pointing at what is already in the place</h3>
+		<p>This is the main reason the file exists. A <code>$FromModel</code> entry tells RoFlux that something is there, what class it is, and what is inside it, without RoFlux ever touching it.</p>
+<pre><code>[
+    {
+        <span class="tok-s">"$FromModel"</span>: <span class="tok-s">"Workspace/Map"</span>,
+        <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Model"</span>,
+
+        <span class="tok-s">"Spawns"</span>: { <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Folder"</span> }
+    }
+]</code></pre>
+		<p>Your map is now in the sourcemap, so <code>workspace.Map.Spawns</code> autocompletes and type checks in your editor, but RoFlux will never create it, change it, or delete it. It is a description, not an instruction. See <a href="#frommodel">$FromModel</a> for the details.</p>
+
+		<h3>Declaring loose instances</h3>
+		<p>The file also takes ordinary declarations. Give each one a <code>$Name</code> and a <code>$Parent</code> and it is built like anything else, and RoFlux does own these.</p>
+<pre><code>[
+    {
+        <span class="tok-s">"$Name"</span>: <span class="tok-s">"Remotes"</span>,
+        <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Folder"</span>,
+        <span class="tok-s">"$Parent"</span>: <span class="tok-s">"ReplicatedStorage"</span>,
+
+        <span class="tok-s">"Ping"</span>: { <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"RemoteEvent"</span> },
+        <span class="tok-s">"Buy"</span>: { <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"RemoteFunction"</span> }
+    }
+]</code></pre>
+		<p>That saves making a folder on disk that would only ever hold a meta file.</p>
+
+		<h3>The shape of the file</h3>
+		<p>It is an array when you have several entries, or a single object when you only have one. Both are fine.</p>
+<pre><code><span class="tok-c">-- one entry</span>
+{ <span class="tok-s">"$FromModel"</span>: <span class="tok-s">"Workspace/Map"</span>, <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Model"</span> }</code></pre>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Rule</th><th>Why</th></tr></thead>
+			<tbody>
+				<tr><td>It is always read</td><td>Even when <code>Include</code> is set, because references only affect the sourcemap and every place wants them.</td></tr>
+				<tr><td>Entries need <code>$Parent</code></td><td>There is no folder around them to say where they go. Without one they fall back to <code>Default</code>.</td></tr>
+				<tr><td>Entries need <code>$Name</code></td><td>Otherwise they are all named after the file, which is <code>meta</code>.</td></tr>
+				<tr><td>Empty entries are skipped</td><td>An entry with no class, children or properties produces nothing.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<div class="note">
+			<strong>The name is not special anywhere else</strong>
+			<p>Deeper in the project any <code>.inst.json</code> works and is placed by the folder it sits in. <code>meta.inst.json</code> is only a convention for the root, where the root rules would otherwise ignore a loose file.</p>
+		</div>
+
+		<h2 id="files">How files map</h2>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>File</th><th>Becomes</th></tr></thead>
+			<tbody>
+				<tr><td><code>Thing.luau</code></td><td><code>ModuleScript</code></td></tr>
+				<tr><td><code>Thing.server.luau</code></td><td><code>Script</code></td></tr>
+				<tr><td><code>Thing.client.luau</code></td><td><code>LocalScript</code></td></tr>
+				<tr><td><code>Thing.d.luau</code></td><td>ignored, always</td></tr>
+				<tr><td><code>Thing.inst.json</code></td><td>one or more declared instances</td></tr>
+				<tr><td><code>meta.inst.json</code></td><td>the same, but the only one allowed at the project root</td></tr>
+				<tr><td><code>Thing.meta.json</code></td><td>metadata applied to <code>Thing.luau</code> beside it</td></tr>
+				<tr><td><code>init.meta.json</code></td><td>metadata for the folder it sits in</td></tr>
+				<tr><td><code>Thing.txt</code>, <code>.md</code>, <code>.csv</code>, <code>.html</code>, <code>.css</code>, <code>.toml</code>, <code>.yml</code></td><td><code>StringValue</code></td></tr>
+				<tr><td><code>Thing.json</code></td><td><code>ModuleScript</code> returning the decoded data as a Luau table</td></tr>
+				<tr><td>anything else</td><td>ignored, unless a hook script claims the extension</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p><code>.lua</code> works everywhere <code>.luau</code> does.</p>
+		<div class="note">
+			<strong>Luau is never parsed</strong>
+			<p>Script source is read as text and sent verbatim. RoFlux does not compile, transpile or rewrite it, so any syntax Roblox accepts is fine. The only thing that can change your source is a hook script you wrote yourself.</p>
+		</div>
+
+		<h2 id="folders">Folders and init files</h2>
+		<p>A plain folder becomes a <code>Folder</code>. A folder containing an <code>init</code> script becomes that script instead, and everything else in the folder becomes its children.</p>
+<pre><code>Signal/
+├─ init.luau           <span class="tok-c">-- Signal is now a ModuleScript</span>
+└─ Connection.luau     <span class="tok-c">-- a child of Signal</span></code></pre>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Init file</th><th>Folder becomes</th></tr></thead>
+			<tbody>
+				<tr><td><code>init.luau</code></td><td><code>ModuleScript</code></td></tr>
+				<tr><td><code>init.server.luau</code></td><td><code>Script</code></td></tr>
+				<tr><td><code>init.client.luau</code></td><td><code>LocalScript</code></td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>Only the first init file found is used, checked in the order server, client, module.</p>
+
+		<h2 id="meta">Metadata files</h2>
+		<p>There are three JSON shapes, and they all take the same directives.</p>
+
+		<h3><code>init.meta.json</code></h3>
+		<p>Describes the folder it lives in. This is where you say where a tree belongs.</p>
+<pre><code>{
+    <span class="tok-s">"$Parent"</span>: <span class="tok-s">"StarterPlayer/StarterPlayerScripts"</span>,
+    <span class="tok-s">"$Attributes"</span>: { <span class="tok-s">"Version"</span>: <span class="tok-s">"1.2.0"</span> },
+
+    <span class="tok-s">"Settings"</span>: { <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Configuration"</span> }
+}</code></pre>
+
+		<h3>Sidecar <code>Thing.meta.json</code></h3>
+		<p>Sits beside <code>Thing.luau</code> and applies to it. This is how you give a script properties, attributes, tags, or children of its own.</p>
+<pre><code><span class="tok-c">-- Inventory.meta.json, next to Inventory.luau</span>
+{
+    <span class="tok-s">"$Tags"</span>: [<span class="tok-s">"Service"</span>],
+    <span class="tok-s">"Config"</span>: { <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Configuration"</span> }
+}</code></pre>
+		<p>The alternative is the folder form: rename to <code>Inventory/init.luau</code> and put siblings next to it.</p>
+
+		<h3><code>Thing.inst.json</code></h3>
+		<p>Declares instances that have no source file of their own. It may be a single object, or an array to declare several at once.</p>
+<pre><code>{
+    <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Folder"</span>,
+    <span class="tok-s">"Spawns"</span>: {
+        <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Configuration"</span>,
+        <span class="tok-s">"Limit"</span>: 12
+    }
+}</code></pre>
+		<p>The instance takes the file's stem as its name unless you set <code>$Name</code>. A declaration with nothing in it produces nothing.</p>
+
+		<h2 id="directives">Directives</h2>
+		<p>Keys beginning with <code>$</code> are directives. Every other key is read one of two ways:</p>
+		<ul>
+			<li>an object means a <strong>child instance</strong></li>
+			<li>anything else means a <strong>property</strong></li>
+		</ul>
+		<p>So you rarely need <code>$Properties</code> at all. Write the property straight in:</p>
+<pre><code>{
+    <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Part"</span>,
+
+    <span class="tok-s">"Anchored"</span>: <span class="tok-k">true</span>,           <span class="tok-c">-- property</span>
+    <span class="tok-s">"Position"</span>: [0, 10, 0],     <span class="tok-c">-- property</span>
+
+    <span class="tok-s">"Weld"</span>: {                    <span class="tok-c">-- object, so a child</span>
+        <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"WeldConstraint"</span>
+    }
+}</code></pre>
+		<p><code>$Properties</code> still works and is worth using when a property name would clash with a directive, or when you want the two kinds visually separated.</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Directive</th><th>Meaning</th></tr></thead>
+			<tbody>
+				<tr><td><code>$ClassName</code></td><td>Class to create. Defaults to <code>Folder</code>.</td></tr>
+				<tr><td><code>$Parent</code></td><td>Where in the DataModel this tree goes, e.g. <code>StarterPlayer/StarterPlayerScripts</code>.</td></tr>
+				<tr><td><code>$Path</code></td><td>A file or folder to insert at this point.</td></tr>
+				<tr><td><code>$FromModel</code></td><td>Reference existing game content. Sourcemap only.</td></tr>
+				<tr><td><code>$Name</code></td><td>Override the instance name.</td></tr>
+				<tr><td><code>$Properties</code></td><td>Table of properties.</td></tr>
+				<tr><td><code>$Attributes</code></td><td>Table of attributes.</td></tr>
+				<tr><td><code>$Tags</code></td><td>Array of tags.</td></tr>
+				<tr><td><code>$Children</code></td><td>Explicit child table, for names that would collide with a directive.</td></tr>
+				<tr><td><code>$Ignore</code></td><td><code>true</code> skips this declaration entirely.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>An unknown <code>$Key</code> whose value looks like a declaration is read as a child named without the <code>$</code>, and RoFlux warns. That catches a common typo rather than silently dropping your instance.</p>
+
+		<h2 id="values">Property values</h2>
+		<p>Values are plain JSON. The plugin coerces each one against the type the property actually has on the live instance, so you rarely need to say what a value is.</p>
+<pre><code>{
+    <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Part"</span>,
+    <span class="tok-s">"$Properties"</span>: {
+        <span class="tok-s">"Position"</span>: [0, 10, 0],          <span class="tok-c">-- Vector3</span>
+        <span class="tok-s">"Color"</span>: [1, 0, 0],              <span class="tok-c">-- Color3, 0-1</span>
+        <span class="tok-s">"Size"</span>: { <span class="tok-s">"x"</span>: 4, <span class="tok-s">"y"</span>: 1, <span class="tok-s">"z"</span>: 4 }, <span class="tok-c">-- named axes also work</span>
+        <span class="tok-s">"Material"</span>: <span class="tok-s">"Neon"</span>,             <span class="tok-c">-- enum by name</span>
+        <span class="tok-s">"Anchored"</span>: <span class="tok-k">true</span>
+    }
+}</code></pre>
+		<p>Colour components above 1 are treated as 0&ndash;255. A hex string such as <code>"#3C91F5"</code> works too. When inference is not enough, be explicit:</p>
+<pre><code><span class="tok-s">"BackgroundColor3"</span>: { <span class="tok-s">"$Type"</span>: <span class="tok-s">"Color3"</span>, <span class="tok-s">"$Value"</span>: [1, 0, 0] }</code></pre>
+		<p>A property written as an object is normally read as a child, but an object holding <code>$Type</code> is always a property, so the explicit form works anywhere.</p>
+		<p>Supported types include <code>Vector3</code>, <code>Vector2</code>, <code>UDim</code>, <code>UDim2</code>, <code>Color3</code>, <code>BrickColor</code>, <code>CFrame</code>, <code>Rect</code>, <code>NumberRange</code>, <code>NumberSequence</code>, <code>ColorSequence</code>, <code>Font</code>, <code>Vector3int16</code> and <code>Vector2int16</code>.</p>
+
+		<h2 id="frommodel">$FromModel</h2>
+		<p>Declares content that already exists in the place so tooling knows about it. RoFlux <strong>never</strong> creates, edits or deletes these, and they are stripped out of the sync payload entirely. They exist purely so the sourcemap is complete.</p>
+<pre><code><span class="tok-c">-- meta.inst.json</span>
+[
+    {
+        <span class="tok-s">"$FromModel"</span>: <span class="tok-s">"Workspace/Map"</span>,
+        <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Model"</span>,
+
+        <span class="tok-s">"Spawns"</span>: { <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Folder"</span> }
+    }
+]</code></pre>
+		<p>The path is where it lives in the DataModel, <code>$ClassName</code> is its type, and children describe its shape. Declared children inherit the reference status, so they are equally untouched.</p>
+
+		<h2 id="path">$Path</h2>
+		<p><code>$Path</code> says which file or folder should be inserted at that point. The file becomes the instance, and the key it is declared under becomes its name.</p>
+<pre><code>{
+    <span class="tok-s">"ServerScriptService"</span>: {
+        <span class="tok-s">"Main"</span>: { <span class="tok-s">"$Path"</span>: <span class="tok-s">"src/bootstrap.server.luau"</span> }
+    }
+}</code></pre>
+		<p>That produces <code>ServerScriptService.Main</code>, a <code>Script</code> holding the contents of <code>src/bootstrap.server.luau</code>. Paths are relative to the project root, and <code>$Path</code> reaches files the root rules would otherwise ignore. Pointing at a folder mounts the whole folder, init file and all. If the target does not exist, RoFlux warns and carries on.</p>
+
+		<h2 id="sourcemap">The sourcemap</h2>
+		<p><code>sourcemap.json</code> is rewritten on every compile and every rebuild. It is what luau-lsp reads, and it is RoFlux's own picture of the project.</p>
+<pre><code>MyGame [DataModel]           &lt;- default.project.json
+  ReplicatedStorage
+    Shared [Folder]          &lt;- Shared/init.meta.json
+      Greeting [ModuleScript] &lt;- Shared/Greeting.luau
+  Workspace
+    Map [Model]              &lt;- meta.inst.json</code></pre>
+		<p>Every node carries the files it came from, including instances produced by a transpiler hook, so an editor can jump from an instance back to the file that made it.</p>
+
+		<div class="pager">
+			<a href="getting-started.html">&larr; Getting started</a>
+			<a href="syncing.html">How syncing works &rarr;</a>
+		</div>
+	</main>
+</div>
+
+<footer>
+	<div class="wrap">
+		<div class="foot-grid">
+			<div>
+				<h6>Documentation</h6>
+				<a href="getting-started.html">Getting started</a>
+				<a href="project.html">Project format</a>
+				<a href="syncing.html">How syncing works</a>
+			</div>
+			<div>
+				<h6>Reference</h6>
+				<a href="scripts.html">Script system</a>
+				<a href="cli.html">CLI commands</a>
+				<a href="edge-cases.html">Edge cases</a>
+			</div>
+			<div>
+				<h6>Project</h6>
+				<a href="index.html">Home</a>
+			</div>
+		</div>
+		<p class="foot-note">RoFlux syncs one way, from your editor into Roblox Studio.</p>
+	</div>
+</footer>
+
+</body>
+</html>

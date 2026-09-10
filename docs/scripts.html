@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Script system &middot; RoFlux</title>
+<link rel="icon" href="assets/RoFlux_icon_512.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav class="nav">
+	<div class="wrap nav-inner">
+		<a class="nav-logo" href="index.html"><img src="assets/RoFlux_wordmark.png" alt="RoFlux"></a>
+		<div class="nav-links">
+			<a href="getting-started.html">Get started</a>
+			<a href="project.html">Project format</a>
+			<a href="syncing.html">Syncing</a>
+			<a href="scripts.html" class="active">Scripts</a>
+			<a href="cli.html">CLI</a>
+			<a href="edge-cases.html">Edge cases</a>
+		</div>
+	</div>
+</nav>
+
+<div class="wrap docs">
+	<aside class="side">
+		<h5>Guides</h5>
+		<a href="getting-started.html">Getting started</a>
+		<a href="project.html">Project format</a>
+		<a href="syncing.html">How syncing works</a>
+		<a href="scripts.html" class="active">Script system</a>
+		<h5>Reference</h5>
+		<a href="cli.html">CLI commands</a>
+		<a href="edge-cases.html">Edge cases</a>
+		<h5>On this page</h5>
+		<a href="#what">What they are</a>
+		<a href="#rules">Loading rules</a>
+		<a href="#hooks">Source hooks</a>
+		<a href="#transpilers">Transpilers</a>
+		<a href="#many">Making many instances</a>
+		<a href="#files">Reading files</a>
+		<a href="#events">File events</a>
+		<a href="#api">Full API</a>
+		<a href="#examples">Examples</a>
+	</aside>
+
+	<main class="content">
+		<h1>Script system</h1>
+		<p class="lede">Anything in <code>scripts/</code> runs while your project is being compiled. Scripts can rewrite source on its way to Roblox, claim a file type and turn it into instances, read other files on disk, and react to files being added or removed.</p>
+
+		<h2 id="what">What they are</h2>
+		<p>A hook script is a normal Luau file. It runs on the server, not in Roblox, and its job is to register callbacks. Those callbacks are then called during every compile.</p>
+<pre><code><span class="tok-c">-- scripts/banner.luau</span>
+<span class="tok-k">roflux</span>.onRead(<span class="tok-k">function</span>(file)
+	<span class="tok-k">return</span> <span class="tok-s">"-- built by RoFlux\n"</span> .. file.source
+<span class="tok-k">end</span>)</code></pre>
+		<p>Every <code>.luau</code> file under <code>scripts/</code> is loaded, in name order, including files in subfolders. <code>.d.luau</code> files are skipped.</p>
+		<p>Editing anything in <code>scripts/</code> reloads all of them and rebuilds the project, so you can work on a hook with the server running.</p>
+
+		<h2 id="rules">Loading rules</h2>
+		<p>There are two rules, and they exist so a bad hook cannot stall your build.</p>
+		<h3>Scripts must not yield while loading</h3>
+		<p>The top level of a hook script runs once and must finish. If it yields, RoFlux stops with an error. Register your callbacks and return.</p>
+		<h3>Callbacks run inside coroutines</h3>
+		<p>Every callback is run in its own coroutine, so a hook that does yield will not block the compile. If one does yield, RoFlux warns, skips its result for that pass, and keeps the coroutine alive to resume on the next rebuild.</p>
+		<div class="note warn">
+			<strong>Hook scripts run in the server's Luau, not Roblox's</strong>
+			<p>They do not have <code>game</code>, <code>workspace</code>, <code>task</code>, or any Roblox API. They also run on an older Luau than Studio does, so <code>const</code> is not available in a hook script. Use <code>local</code>. Your actual game code is untouched by this and can use anything Roblox supports.</p>
+		</div>
+
+		<h2 id="hooks">Source hooks</h2>
+		<p>Two hooks see script source. Both get the same file table and both can replace the source by returning a string.</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Hook</th><th>When it runs</th></tr></thead>
+			<tbody>
+				<tr><td><code>roflux.onRead</code></td><td>Right after a source file is read from disk.</td></tr>
+				<tr><td><code>roflux.onTransfer</code></td><td>Last step before the source is handed to Roblox.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>They run in that order, and they chain. If two hooks both return a string, the second one sees the output of the first.</p>
+<pre><code><span class="tok-k">roflux</span>.onTransfer(<span class="tok-k">function</span>(file)
+	<span class="tok-k">if</span> file.className ~= <span class="tok-s">"ModuleScript"</span> <span class="tok-k">then</span>
+		<span class="tok-k">return</span> <span class="tok-k">nil</span>
+	<span class="tok-k">end</span>
+
+	<span class="tok-k">return</span> minify(file.source)
+<span class="tok-k">end</span>)</code></pre>
+		<p>Return <code>nil</code> to leave the source alone. This is where things like a build stamp, a licence header, stripping debug calls, or obfuscation belong.</p>
+
+		<h2 id="transpilers">Transpilers</h2>
+		<p>A transpiler claims a file extension. RoFlux normally ignores file types it does not know, but once a hook claims one, every file with that extension is handed to it and whatever it returns becomes instances.</p>
+<pre><code><span class="tok-k">roflux</span>.transpile(<span class="tok-s">"md"</span>, <span class="tok-k">function</span>(file)
+	<span class="tok-k">return</span> {
+		[<span class="tok-s">"$ClassName"</span>] = <span class="tok-s">"StringValue"</span>,
+		[<span class="tok-s">"$Properties"</span>] = { Value = file.text },
+		[<span class="tok-s">"$Tags"</span>] = { <span class="tok-s">"Docs"</span> },
+	}
+<span class="tok-k">end</span>)</code></pre>
+		<p>Returning a plain string is shorthand for a <code>ModuleScript</code> with that source. Returning <code>nil</code> falls back to the built in behaviour for that extension. Setting <code>$Ignore</code> drops the file entirely.</p>
+		<p>A transpiler can claim a built in type too. Claiming <code>json</code> replaces the default handling of every <code>.json</code> file in the project.</p>
+
+		<h2 id="many">Making many instances</h2>
+		<p>Declarations nest, so one file can build a whole tree. Return an array to produce several separate instances from a single file.</p>
+<pre><code><span class="tok-k">roflux</span>.transpile(<span class="tok-s">"html"</span>, <span class="tok-k">function</span>(file)
+	<span class="tok-k">local</span> screen = {
+		[<span class="tok-s">"$ClassName"</span>] = <span class="tok-s">"Frame"</span>,
+		[<span class="tok-s">"$Attributes"</span>] = { Source = file.path },
+	}
+
+	<span class="tok-k">local</span> order = 0
+
+	<span class="tok-k">for</span> tag, body <span class="tok-k">in</span> file.text:gmatch(<span class="tok-s">"&lt;(%a[%w]*)[^&gt;]*&gt;%s*([^&lt;]*)%s*&lt;/"</span>) <span class="tok-k">do</span>
+		order += 1
+		screen[tag .. order] = {
+			[<span class="tok-s">"$ClassName"</span>] = <span class="tok-s">"TextLabel"</span>,
+			[<span class="tok-s">"$Properties"</span>] = { Text = body, LayoutOrder = order },
+		}
+	<span class="tok-k">end</span>
+
+	<span class="tok-k">return</span> {
+		screen,
+		{
+			[<span class="tok-s">"$Name"</span>] = <span class="tok-s">"Markup"</span>,
+			[<span class="tok-s">"$ClassName"</span>] = <span class="tok-s">"StringValue"</span>,
+			[<span class="tok-s">"$Properties"</span>] = { Value = file.text },
+		},
+	}
+<span class="tok-k">end</span>)</code></pre>
+		<p>Everything a transpiler makes is a normal tree node from then on. Each instance records the file it came from, so the sourcemap points back at it, and the diff engine treats it like anything else:</p>
+<pre><code><span class="tok-c">-- adding one line to the html</span>
+sync <span class="tok-a">+1 ~1 -0</span>
+     <span class="tok-s">+ ReplicatedStorage/UI/page/p2 [TextLabel]</span>
+     <span class="tok-k">~ ReplicatedStorage/UI/Markup (Value)</span>
+
+<span class="tok-c">-- deleting the html</span>
+sync <span class="tok-a">+0 ~0 -2</span>
+     <span class="tok-r">- ReplicatedStorage/UI/page</span>
+     <span class="tok-r">- ReplicatedStorage/UI/Markup</span></code></pre>
+		<p>Only what actually changed is patched, and deleting the file removes everything it produced, children included.</p>
+		<p>A declaration can also carry <code>$Parent</code>, so a single file can put its output anywhere in the DataModel rather than where the file sits.</p>
+
+		<h2 id="files">Reading files</h2>
+		<p>Hooks can read anything inside the project folder. This is what makes generators practical, since a transpiler usually needs more than the one file it was handed. A design token file, a shared palette, a folder of icons, a schema.</p>
+<pre><code><span class="tok-k">local</span> palette = <span class="tok-k">roflux</span>.json(<span class="tok-s">"design/palette.json"</span>)
+
+<span class="tok-k">roflux</span>.transpile(<span class="tok-s">"ui"</span>, <span class="tok-k">function</span>(file)
+	<span class="tok-k">local</span> lines = { <span class="tok-s">"return {"</span> }
+
+	<span class="tok-k">for</span> _, name <span class="tok-k">in</span> <span class="tok-k">roflux</span>.list(<span class="tok-s">"design/icons"</span>) <span class="tok-k">do</span>
+		table.insert(lines, `\ticons_{name} = true,`)
+	<span class="tok-k">end</span>
+
+	table.insert(lines, `\taccent = "{palette.accent}",`)
+	table.insert(lines, <span class="tok-s">"}"</span>)
+
+	<span class="tok-k">return</span> table.concat(lines, <span class="tok-s">"\n"</span>)
+<span class="tok-k">end</span>)</code></pre>
+		<p>All paths are relative to the project root. Absolute paths and <code>..</code> are rejected, so a hook cannot reach outside the project.</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Function</th><th>Returns</th></tr></thead>
+			<tbody>
+				<tr><td><code>roflux.read(path)</code></td><td>File contents as a string, or <code>nil</code> if it is missing.</td></tr>
+				<tr><td><code>roflux.json(path)</code></td><td>Decoded JSON as a table, or <code>nil</code> if missing. Errors if the file is not valid JSON.</td></tr>
+				<tr><td><code>roflux.list(path)</code></td><td>Names of the entries directly inside a folder, sorted.</td></tr>
+				<tr><td><code>roflux.walk(path)</code></td><td>Every file below a folder, as project relative paths.</td></tr>
+				<tr><td><code>roflux.exists(path)</code></td><td><code>true</code> if the path exists.</td></tr>
+				<tr><td><code>roflux.isDirectory(path)</code></td><td><code>true</code> if the path is a folder.</td></tr>
+				<tr><td><code>roflux.root()</code></td><td>Absolute path of the project folder.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<div class="note warn">
+			<strong>Reads are not tracked</strong>
+			<p>A file you read with these functions does not become a rebuild trigger on its own. If a generator depends on <code>design/palette.json</code>, editing that file only rebuilds if it is somewhere the watcher already looks, which is anywhere in the project folder. Files outside the project cannot be read at all.</p>
+		</div>
+
+		<h2 id="events">File events</h2>
+		<p>Three hooks fire when the watcher sees something happen. They are for reacting, not for changing the tree, and their return value is ignored.</p>
+<pre><code><span class="tok-k">roflux</span>.onAdded(<span class="tok-k">function</span>(file)
+	<span class="tok-k">roflux</span>.log(<span class="tok-s">"new file"</span>, file.path)
+<span class="tok-k">end</span>)</code></pre>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Hook</th><th>Fires when</th></tr></thead>
+			<tbody>
+				<tr><td><code>roflux.onAdded</code></td><td>A file appears.</td></tr>
+				<tr><td><code>roflux.onRemoved</code></td><td>A file is deleted.</td></tr>
+				<tr><td><code>roflux.onChanged</code></td><td>A file is written to.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>These run before the rebuild, so anything they write to disk is picked up by the compile that follows.</p>
+
+		<h2 id="api">Full API</h2>
+		<h3>The file table</h3>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+			<tbody>
+				<tr><td><code>file.path</code></td><td>Path relative to the project root, using forward slashes.</td></tr>
+				<tr><td><code>file.name</code></td><td>Just the file name.</td></tr>
+				<tr><td><code>file.extension</code></td><td>Lowercase extension, with no dot.</td></tr>
+				<tr><td><code>file.source</code></td><td>Current source. Source hooks change this.</td></tr>
+				<tr><td><code>file.text</code></td><td>Original contents, as read from disk.</td></tr>
+				<tr><td><code>file.className</code></td><td>Class the file is about to become, on source hooks.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<h3>Functions</h3>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Function</th><th>What it does</th></tr></thead>
+			<tbody>
+				<tr><td><code>roflux.on(event, fn)</code></td><td>Register by event name. Same as the named helpers below.</td></tr>
+				<tr><td><code>roflux.onRead(fn)</code></td><td>Source was read.</td></tr>
+				<tr><td><code>roflux.onTransfer(fn)</code></td><td>Source is about to go to Roblox.</td></tr>
+				<tr><td><code>roflux.onAdded(fn)</code></td><td>File added.</td></tr>
+				<tr><td><code>roflux.onRemoved(fn)</code></td><td>File removed.</td></tr>
+				<tr><td><code>roflux.onChanged(fn)</code></td><td>File changed.</td></tr>
+				<tr><td><code>roflux.onCompile(fn)</code></td><td>Reserved for compile lifecycle work.</td></tr>
+				<tr><td><code>roflux.onSync(fn)</code></td><td>Reserved for sync lifecycle work.</td></tr>
+				<tr><td><code>roflux.transpile(ext, fn)</code></td><td>Claim a file extension.</td></tr>
+				<tr><td><code>roflux.defer(fn)</code></td><td>Run something on the next pass.</td></tr>
+				<tr><td><code>roflux.log(...)</code></td><td>Print through the server logger.</td></tr>
+				<tr><td><code>roflux.warn(...)</code></td><td>Print as a warning.</td></tr>
+				<tr><td><code>roflux.read</code>, <code>json</code>, <code>list</code>, <code>walk</code>, <code>exists</code>, <code>isDirectory</code>, <code>root</code></td><td>Reading files, described above.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>The generated <code>types.d.luau</code> declares all of this, so hook scripts get autocomplete and type checking in your editor.</p>
+
+		<h2 id="examples">Examples</h2>
+		<h3>Strip debug calls from a release build</h3>
+<pre><code><span class="tok-k">local</span> release = <span class="tok-k">roflux</span>.exists(<span class="tok-s">"RELEASE"</span>)
+
+<span class="tok-k">roflux</span>.onTransfer(<span class="tok-k">function</span>(file)
+	<span class="tok-k">if</span> <span class="tok-k">not</span> release <span class="tok-k">then</span>
+		<span class="tok-k">return</span> <span class="tok-k">nil</span>
+	<span class="tok-k">end</span>
+
+	<span class="tok-k">return</span> (file.source:gsub(<span class="tok-s">"print%b()"</span>, <span class="tok-s">""</span>))
+<span class="tok-k">end</span>)</code></pre>
+
+		<h3>Turn a folder of images into a lookup table</h3>
+<pre><code><span class="tok-k">roflux</span>.transpile(<span class="tok-s">"assets"</span>, <span class="tok-k">function</span>()
+	<span class="tok-k">local</span> lines = { <span class="tok-s">"return {"</span> }
+
+	<span class="tok-k">for</span> _, path <span class="tok-k">in</span> <span class="tok-k">roflux</span>.walk(<span class="tok-s">"art"</span>) <span class="tok-k">do</span>
+		<span class="tok-k">local</span> id = <span class="tok-k">roflux</span>.read(path)
+
+		<span class="tok-k">if</span> id <span class="tok-k">then</span>
+			<span class="tok-k">local</span> key = path:match(<span class="tok-s">"([^/]+)%.%w+$"</span>)
+			table.insert(lines, `\t{key} = "{id:gsub("%s+$", "")}",`)
+		<span class="tok-k">end</span>
+	<span class="tok-k">end</span>
+
+	table.insert(lines, <span class="tok-s">"}"</span>)
+	<span class="tok-k">return</span> table.concat(lines, <span class="tok-s">"\n"</span>)
+<span class="tok-k">end</span>)</code></pre>
+
+		<h3>Generate a UI tree from a data file</h3>
+<pre><code><span class="tok-k">roflux</span>.transpile(<span class="tok-s">"screen"</span>, <span class="tok-k">function</span>(file)
+	<span class="tok-k">local</span> spec = <span class="tok-k">roflux</span>.json(file.path)
+	<span class="tok-k">local</span> screen = { [<span class="tok-s">"$ClassName"</span>] = <span class="tok-s">"ScreenGui"</span> }
+
+	<span class="tok-k">for</span> name, button <span class="tok-k">in</span> spec.buttons <span class="tok-k">do</span>
+		screen[name] = {
+			[<span class="tok-s">"$ClassName"</span>] = <span class="tok-s">"TextButton"</span>,
+			[<span class="tok-s">"$Properties"</span>] = {
+				Text = button.label,
+				Position = button.position,
+				BackgroundColor3 = button.color,
+			},
+			[<span class="tok-s">"$Tags"</span>] = { <span class="tok-s">"Generated"</span> },
+		}
+	<span class="tok-k">end</span>
+
+	<span class="tok-k">return</span> screen
+<span class="tok-k">end</span>)</code></pre>
+		<p>Because property values are plain JSON, <code>button.position</code> can be <code>[0.5, 0, 0.5, 0]</code> and it becomes a <code>UDim2</code>, and <code>button.color</code> can be <code>[60, 145, 245]</code> and it becomes a <code>Color3</code>.</p>
+
+		<div class="pager">
+			<a href="syncing.html">&larr; How syncing works</a>
+			<a href="cli.html">CLI commands &rarr;</a>
+		</div>
+	</main>
+</div>
+
+<footer>
+	<div class="wrap">
+		<div class="foot-grid">
+			<div>
+				<h6>Documentation</h6>
+				<a href="getting-started.html">Getting started</a>
+				<a href="project.html">Project format</a>
+				<a href="syncing.html">How syncing works</a>
+			</div>
+			<div>
+				<h6>Reference</h6>
+				<a href="scripts.html">Script system</a>
+				<a href="cli.html">CLI commands</a>
+				<a href="edge-cases.html">Edge cases</a>
+			</div>
+			<div>
+				<h6>Project</h6>
+				<a href="index.html">Home</a>
+			</div>
+		</div>
+		<p class="foot-note">RoFlux syncs one way, from your editor into Roblox Studio.</p>
+	</div>
+</footer>
+
+</body>
+</html>

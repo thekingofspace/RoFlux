@@ -1,0 +1,40 @@
+# rust build output
+target/
+**/target/
+*.pdb
+
+# roflux output
+sourcemap.json
+types.d.luau
+Compiled/
+
+# built roblox files
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+*.rbxl.lock
+*.rbxlx.lock
+
+# binaries
+*.exe
+*.dll
+*.so
+*.dylib
+
+# local sandbox
+TestProject/
+
+# editors
+.vscode/
+.idea/
+*.code-workspace
+
+# os junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# logs and temp
+*.log
+*.tmp

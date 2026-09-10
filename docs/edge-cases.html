@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Edge cases &middot; RoFlux</title>
+<link rel="icon" href="assets/RoFlux_icon_512.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav class="nav">
+	<div class="wrap nav-inner">
+		<a class="nav-logo" href="index.html"><img src="assets/RoFlux_wordmark.png" alt="RoFlux"></a>
+		<div class="nav-links">
+			<a href="getting-started.html">Get started</a>
+			<a href="project.html">Project format</a>
+			<a href="syncing.html">Syncing</a>
+			<a href="scripts.html">Scripts</a>
+			<a href="cli.html">CLI</a>
+			<a href="edge-cases.html" class="active">Edge cases</a>
+		</div>
+	</div>
+</nav>
+
+<div class="wrap docs">
+	<aside class="side">
+		<h5>Guides</h5>
+		<a href="getting-started.html">Getting started</a>
+		<a href="project.html">Project format</a>
+		<a href="syncing.html">How syncing works</a>
+		<a href="scripts.html">Script system</a>
+		<h5>Reference</h5>
+		<a href="cli.html">CLI commands</a>
+		<a href="edge-cases.html" class="active">Edge cases</a>
+		<h5>On this page</h5>
+		<a href="#files">Files and naming</a>
+		<a href="#tree">Tree building</a>
+		<a href="#props">Properties</a>
+		<a href="#deleting">Deleting</a>
+		<a href="#studio">Studio</a>
+		<a href="#hooks">Hook scripts</a>
+		<a href="#editor">Editor and types</a>
+		<a href="#builds">Place files</a>
+	</aside>
+
+	<main class="content">
+		<h1>Edge cases</h1>
+		<p class="lede">The things that surprise people. Most of these are deliberate, and knowing them up front saves an afternoon.</p>
+
+		<h2 id="files">Files and naming</h2>
+
+		<h3>Loose files at the project root do nothing</h3>
+		<p>Only <code>meta.inst.json</code> and folders holding an <code>init.meta.json</code> compile at the top level. A <code>.luau</code> file sitting alone at the root is ignored with no warning, because a project root is usually full of things that are not game code.</p>
+		<p>If you want a root file in the tree, point at it with <code>$Path</code> from the project file, which bypasses this rule.</p>
+
+		<h3>meta.inst.json is the only loose root file that compiles</h3>
+		<p>It is where instances that have no file of their own are declared, mostly <code>$FromModel</code> references to content already in the place. Any other <code>.inst.json</code> sitting at the root is ignored. Deeper in the project the name is not special and any <code>.inst.json</code> works.</p>
+
+		<h3>Entries in meta.inst.json need $Name and $Parent</h3>
+		<p>There is no folder around them to supply either. Without a <code>$Name</code> every entry is called <code>meta</code> after the file, and without a <code>$Parent</code> it falls back to the project <code>Default</code>. <code>$FromModel</code> entries need neither, because the path they point at supplies both.</p>
+
+		<h3>A folder without an init.meta.json never compiles at the root</h3>
+		<p>Nested folders do not need one. Only the top level does, because that is what tells RoFlux the folder is game content and where it belongs.</p>
+
+		<h3>scripts/ is reserved</h3>
+		<p>It holds compile time hooks and is never scanned as game content, even if you put an <code>init.meta.json</code> in it.</p>
+
+		<h3>.d.luau is always ignored</h3>
+		<p>Type definition files never become instances, anywhere in the project. This is on by default and cannot be turned off.</p>
+
+		<h3>A sidecar with no partner is silently unused</h3>
+		<p><code>Thing.meta.json</code> applies to <code>Thing.luau</code> next to it. If you rename or delete the script and leave the meta file behind, it matches nothing and does nothing. It will not warn.</p>
+
+		<h3>Names come from the file, not the path</h3>
+		<p><code>Inventory.server.luau</code> becomes an instance named <code>Inventory</code>. The suffix picks the class and is removed from the name. Use <code>$Name</code> in a meta file to override.</p>
+
+		<h3>Dots in names</h3>
+		<p>Instance paths are split on both <code>/</code> and <code>.</code>, so a <code>$Parent</code> can be written either way. That also means an instance name containing a dot cannot be addressed in a path.</p>
+
+		<h2 id="tree">Tree building</h2>
+
+		<h3>Two things can land on the same name</h3>
+		<p>If a folder and an <code>.inst.json</code> both produce an instance with the same name in the same parent, they merge rather than one winning. Properties, attributes, tags and children are combined, and a class name that is not <code>Folder</code> wins over one that is. This is what lets a meta file add children to something a file already created.</p>
+
+		<h3>An empty declaration produces nothing</h3>
+		<p>An <code>.inst.json</code> with no class, path, children, properties, attributes or tags is skipped. An empty file is fine and produces nothing.</p>
+
+		<h3>Unknown $Directives are read as children</h3>
+		<p>Writing <code>"$MyThing": { "$ClassName": "Folder" }</code> is almost certainly a typo for a child named <code>MyThing</code>. RoFlux reads it as that child and warns, rather than dropping it.</p>
+
+		<h3>A tree with nowhere to go is skipped</h3>
+		<p>A top level folder with no <code>$Parent</code>, in a project with no <code>Default</code>, has no home. RoFlux warns and leaves it out. Set <code>Default</code> in the project file to give everything a fallback.</p>
+
+		<h3>$Parent works at any depth</h3>
+		<p>It is not limited to top level folders. A nested folder with a <code>$Parent</code> is lifted out of its position on disk and placed where you asked, which is handy for keeping related code together in the repo while it lives apart in the DataModel.</p>
+
+		<h3>Missing services are reported, not created</h3>
+		<p>Services cannot be created, so a <code>$Parent</code> pointing at something the place does not have is reported as a failure for that tree. Intermediate containers that are not services are created as plain folders.</p>
+
+		<h3>$FromModel never syncs</h3>
+		<p>Reference nodes are stripped from the payload before it is sent. They show up in the sourcemap and nowhere else. They are also skipped by <code>build</code>, so they never appear in a place file.</p>
+
+		<h2 id="props">Properties</h2>
+
+		<h3>Types are guessed from the live instance</h3>
+		<p>The plugin reads what type a property currently is and converts your JSON to match. This is why <code>[0, 10, 0]</code> becomes a <code>Vector3</code> for <code>Position</code> without you saying so. It also means a property that does not exist on that class cannot be guessed, and is reported as a failure.</p>
+
+		<h3>Colour ranges are inferred</h3>
+		<p>All three components at or below 1 are read as 0 to 1. Anything above 1 is read as 0 to 255. A colour like <code>[1, 1, 1]</code> is white either way, but <code>[1, 0, 0]</code> is pure red rather than nearly black. Use <code>$Type</code> if you need to be sure.</p>
+
+		<h3>Name, Parent and ClassName are not settable</h3>
+		<p>They are controlled by the tree, so they are skipped if you put them in a properties table. Use <code>$Name</code> and <code>$Parent</code> instead.</p>
+
+		<h3>Attributes are cleared only when they were declared before</h3>
+		<p>Removing an attribute from a meta file removes it from the instance, because the diff knows it used to be there. An attribute you set by hand in Studio, that RoFlux never declared, is left alone.</p>
+
+		<h3>Tags are replaced, not merged</h3>
+		<p>If a node declares tags at all, its tag list becomes exactly what you declared, and tags added by hand in Studio are removed. If it declares no tags, they are left alone entirely.</p>
+
+		<h2 id="deleting">Deleting</h2>
+
+		<h3>Drift is only cleaned inside managed trees</h3>
+		<p>An instance you add by hand inside a folder RoFlux manages is deleted on the next full sync, because your project says exactly what belongs there. The same instance placed directly in a service is untouched, because services are passthrough.</p>
+
+		<h3>A class change destroys the instance</h3>
+		<p>Class cannot be changed in place. Renaming <code>Thing.luau</code> to <code>Thing.server.luau</code> turns a <code>ModuleScript</code> into a <code>Script</code>, which means the old instance is destroyed and a new one created. Anything living inside it goes too.</p>
+
+		<h3>Renaming is a delete plus an add</h3>
+		<p>Instances are matched by name. Renaming a file removes the old instance and creates a new one, so anything a person had parented underneath it by hand is lost.</p>
+
+		<h3>Live deletions do not ask</h3>
+		<p>The review runs once, when you connect. After that, deleting a file removes the instance straight away with no prompt. Every apply is wrapped in a change history recording, so Ctrl+Z brings it back.</p>
+
+		<h2 id="studio">Studio</h2>
+
+		<h3>Nothing happens during a playtest</h3>
+		<p>Studio re-runs plugins for the play DataModel. RoFlux checks <code>RunService:IsEdit()</code> and stops immediately if it is not in edit mode, so it does not sync into a running game or start a second copy of itself. Changes that arrive during a run are caught up when you stop.</p>
+
+		<h3>The review is per connection</h3>
+		<p>Disconnecting and reconnecting shows the review again, including the catch up after a playtest if you had disconnected. Cancelling it drops the connection rather than applying part of the sync.</p>
+
+		<h3>Studio needs HTTP requests enabled</h3>
+		<p>Even for <code>127.0.0.1</code>. If the plugin cannot connect at all, this is the first thing to check.</p>
+
+		<h3>The console only shows failures</h3>
+		<p>Routine syncing is not printed. Everything is in the Changes panel instead. Only real failures are sent to the Studio output, because the panel may be closed when one happens.</p>
+
+		<h3>The server is local only</h3>
+		<p>It binds to <code>127.0.0.1</code>, so Studio has to be on the same machine. There is no remote mode.</p>
+
+		<h2 id="hooks">Hook scripts</h2>
+
+		<h3>const does not work in a hook script</h3>
+		<p>Hooks run on the server's Luau, which is older than the one in Studio. Use <code>local</code>. This only applies to files in <code>scripts/</code>. Your game code is passed through untouched and can use anything Roblox supports.</p>
+
+		<h3>A hook that yields loses its result</h3>
+		<p>Callbacks run in coroutines so they cannot block the build. If one yields, RoFlux warns, ignores its result for that pass, and resumes it later. Keep transform hooks straightforward and quick.</p>
+
+		<h3>The top level of a hook must not yield at all</h3>
+		<p>Loading fails with an error if it does. Register callbacks and return.</p>
+
+		<h3>Hooks are reloaded on every edit</h3>
+		<p>Saving anything in <code>scripts/</code> reloads all hooks and rebuilds. Any state a hook held at the top level is lost, which is usually what you want.</p>
+
+		<h3>A transpiler replaces built in handling</h3>
+		<p>Claiming <code>json</code> means your hook handles every <code>.json</code> file in the project, including ones you may not have been thinking about. Return <code>nil</code> for the ones you do not want to handle and RoFlux falls back to its own behaviour.</p>
+
+		<h3>Reads are sandboxed to the project</h3>
+		<p>Absolute paths and <code>..</code> are rejected. A hook cannot read outside the project folder.</p>
+
+		<h3>Reading a file does not make it a dependency</h3>
+		<p>Rebuilds are triggered by the watcher, not by what a hook read. A file inside the project folder triggers a rebuild when it changes, so this works out in practice, but there is no dependency tracking.</p>
+
+		<h2 id="editor">Editor and types</h2>
+
+		<h3>FindFirstChild is never typed</h3>
+		<p>Sourcemap typing works through dot access. <code>script.Child</code> resolves to the real instance and autocompletes. <code>script:FindFirstChild("Child")</code> is typed as <code>Instance?</code> no matter what the sourcemap says. This is how luau-lsp works and is not something RoFlux controls.</p>
+
+		<h3>Siblings are not children</h3>
+		<p>A child declared in a folder's <code>init.meta.json</code> is a child of the folder, so it is a sibling of the scripts in that folder. To give a script its own children, use a sidecar <code>Thing.meta.json</code> or turn it into a folder with an <code>init.luau</code>.</p>
+
+		<h3>The sourcemap is written, not generated by the editor</h3>
+		<p><code>luau-lsp.sourcemap.autogenerate</code> is set to false on purpose. RoFlux writes the file itself on every compile and every rebuild. Leaving autogenerate on means two tools fighting over one file.</p>
+
+		<h3>Your other settings are kept</h3>
+		<p>RoFlux only sets its own keys in <code>.vscode/settings.json</code> and leaves everything else in that file alone.</p>
+
+		<h2 id="builds">Place files</h2>
+
+		<h3>Unknown properties are dropped, with a warning</h3>
+		<p>Building a place file needs real Roblox types, which come from a reflection database. A property that is not real for its class is left out rather than written as something invalid. This is stricter than syncing, where the live instance decides.</p>
+
+		<h3>The reflection database has a version</h3>
+		<p>It is baked into the server at build time. A property added to Roblox after that version will not be known to <code>build</code>, even though syncing handles it fine.</p>
+
+		<h3>Place files are a snapshot</h3>
+		<p><code>build</code> reads the project and writes a file. It has nothing to do with a running server or a connected Studio, so it is safe to run in CI.</p>
+
+		<div class="pager">
+			<a href="cli.html">&larr; CLI commands</a>
+			<span></span>
+		</div>
+	</main>
+</div>
+
+<footer>
+	<div class="wrap">
+		<div class="foot-grid">
+			<div>
+				<h6>Documentation</h6>
+				<a href="getting-started.html">Getting started</a>
+				<a href="project.html">Project format</a>
+				<a href="syncing.html">How syncing works</a>
+			</div>
+			<div>
+				<h6>Reference</h6>
+				<a href="scripts.html">Script system</a>
+				<a href="cli.html">CLI commands</a>
+				<a href="edge-cases.html">Edge cases</a>
+			</div>
+			<div>
+				<h6>Project</h6>
+				<a href="index.html">Home</a>
+			</div>
+		</div>
+		<p class="foot-note">RoFlux syncs one way, from your editor into Roblox Studio.</p>
+	</div>
+</footer>
+
+</body>
+</html>

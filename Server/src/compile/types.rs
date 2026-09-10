@@ -1,0 +1,95 @@
+use std::path::Path;
+
+use anyhow::Result;
+use serde_json::{json, Map, Value};
+
+use crate::log;
+
+pub const DEFINITIONS: &str = r#"export type RoFluxFile = {
+	path: string,
+	name: string,
+	extension: string,
+	source: string,
+	text: string,
+	className: string,
+}
+
+export type RoFluxDeclaration = { [string]: any }
+
+export type RoFluxResult = string | RoFluxDeclaration | { RoFluxDeclaration } | nil
+
+export type RoFluxListener = (file: RoFluxFile) -> RoFluxResult
+
+declare roflux: {
+	on: (event: string, callback: RoFluxListener) -> (),
+	onRead: (callback: RoFluxListener) -> (),
+	onTransfer: (callback: RoFluxListener) -> (),
+	onAdded: (callback: RoFluxListener) -> (),
+	onRemoved: (callback: RoFluxListener) -> (),
+	onChanged: (callback: RoFluxListener) -> (),
+	onCompile: (callback: RoFluxListener) -> (),
+	onSync: (callback: RoFluxListener) -> (),
+	transpile: (extension: string, callback: RoFluxListener) -> (),
+	defer: (callback: () -> ()) -> (),
+	log: (...any) -> (),
+	warn: (...any) -> (),
+}
+"#;
+
+pub fn write_definitions(root: &Path, name: &str) -> Result<()> {
+    let file = root.join(name);
+    let current = std::fs::read_to_string(&file).unwrap_or_default();
+
+    if current == DEFINITIONS {
+        return Ok(());
+    }
+
+    std::fs::write(&file, DEFINITIONS)?;
+    log::info(format!("wrote {name}"));
+
+    Ok(())
+}
+
+pub fn write_settings(root: &Path, definitions: &str) -> Result<()> {
+    let folder = root.join(".vscode");
+    let file = folder.join("settings.json");
+
+    std::fs::create_dir_all(&folder)?;
+
+    let mut settings: Map<String, Value> = std::fs::read_to_string(&file)
+        .ok()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default();
+
+    let before = settings.clone();
+
+    let mut files = settings
+        .get("luau-lsp.types.definitionFiles")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+
+    files.insert("RoFlux".into(), Value::String(definitions.into()));
+
+    settings.insert("luau-lsp.types.definitionFiles".into(), Value::Object(files));
+    settings.insert("luau-lsp.platform.type".into(), json!("roblox"));
+    settings.insert("luau-lsp.sourcemap.enabled".into(), json!(true));
+    settings.insert("luau-lsp.sourcemap.autogenerate".into(), json!(false));
+
+    if settings == before {
+        return Ok(());
+    }
+
+    let rendered = format!("{}\n", serde_json::to_string_pretty(&Value::Object(settings))?);
+    std::fs::write(&file, rendered)?;
+    log::info("wrote .vscode/settings.json");
+
+    Ok(())
+}
+
+pub fn generate(root: &Path) -> Result<()> {
+    let name = "types.d.luau";
+    write_definitions(root, name)?;
+    write_settings(root, name)?;
+    Ok(())
+}

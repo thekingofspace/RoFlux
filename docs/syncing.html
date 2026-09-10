@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How syncing works &middot; RoFlux</title>
+<link rel="icon" href="assets/RoFlux_icon_512.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav class="nav">
+	<div class="wrap nav-inner">
+		<a class="nav-logo" href="index.html"><img src="assets/RoFlux_wordmark.png" alt="RoFlux"></a>
+		<div class="nav-links">
+			<a href="getting-started.html">Get started</a>
+			<a href="project.html">Project format</a>
+			<a href="syncing.html" class="active">Syncing</a>
+			<a href="scripts.html">Scripts</a>
+			<a href="cli.html">CLI</a>
+			<a href="edge-cases.html">Edge cases</a>
+		</div>
+	</div>
+</nav>
+
+<div class="wrap docs">
+	<aside class="side">
+		<h5>Guides</h5>
+		<a href="getting-started.html">Getting started</a>
+		<a href="project.html">Project format</a>
+		<a href="syncing.html" class="active">How syncing works</a>
+		<a href="scripts.html">Script system</a>
+		<h5>Reference</h5>
+		<a href="cli.html">CLI commands</a>
+		<a href="edge-cases.html">Edge cases</a>
+		<h5>On this page</h5>
+		<a href="#direction">One direction</a>
+		<a href="#ownership">Ownership</a>
+		<a href="#deletion">Deletion</a>
+		<a href="#lifecycle">Connect and patch</a>
+		<a href="#review">The review</a>
+		<a href="#playtests">Playtests</a>
+		<a href="#changes">Seeing what changed</a>
+		<a href="#transport">Transport</a>
+	</aside>
+
+	<main class="content">
+		<h1>How syncing works</h1>
+		<p class="lede">The server builds a tree from disk and pushes it into Studio. Studio never sends anything back about the place, so there is no merge and no conflict to resolve.</p>
+
+		<h2 id="direction">One direction</h2>
+		<p>Files are the source of truth. The server scans the project into an instance tree, writes <code>sourcemap.json</code>, and sends the tree to any connected plugin. The plugin's only job is to make the place match.</p>
+		<p>Nothing you do in Studio is read, exported, or written back to disk. If you edit a synced instance by hand, the next patch that touches it will simply put it back.</p>
+
+		<h2 id="ownership">Ownership</h2>
+		<p>This is the part that decides whether RoFlux may delete something. Every node in the tree is one of three kinds.</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Kind</th><th>Created</th><th>Properties applied</th><th>Owns its children</th></tr></thead>
+			<tbody>
+				<tr><td><strong>managed</strong></td><td>yes</td><td>yes</td><td>yes</td></tr>
+				<tr><td><strong>passthrough</strong></td><td>only implicit folders</td><td>yes</td><td>no</td></tr>
+				<tr><td><strong>reference</strong></td><td>never</td><td>never</td><td>never</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<h3>managed</h3>
+		<p>Anything your project actually declares: a script, a folder, an instance from an <code>.inst.json</code>, a child in a <code>meta.json</code>. RoFlux creates it, keeps its properties, attributes and tags in line, and owns its children.</p>
+		<h3>passthrough</h3>
+		<p>Services, and the containers on the path to your content. Their properties are applied if you declared any, but their children are <em>not</em> owned. A Folder you made by hand in <code>Workspace</code> is never touched, because <code>Workspace</code> is passthrough. Services are never created. If a place has no such service, RoFlux reports it and moves on. Intermediate containers that do not exist are created as plain <code>Folder</code>s.</p>
+		<h3>reference</h3>
+		<p><code>$FromModel</code> nodes. Never created, never modified, never deleted, and stripped out of the sync payload before it is even sent. They exist only so the sourcemap is complete.</p>
+
+		<h2 id="deletion">Deletion</h2>
+		<p>Two rules, and they follow from ownership.</p>
+		<ul>
+			<li><strong>Delete a file, and the instance goes.</strong> The next rebuild diffs it out of the tree and the plugin destroys it.</li>
+			<li><strong>Drift inside a managed tree is cleaned up.</strong> On a full sync, any child of a managed instance that your project does not declare is removed.</li>
+		</ul>
+		<p>The second rule stops at the boundary of what you declared. Unmanaged siblings in the same parent survive, because the parent is passthrough:</p>
+<pre><code>ReplicatedStorage        <span class="tok-c">-- passthrough, children not owned</span>
+├─ Shared                <span class="tok-c">-- managed, children owned</span>
+│  ├─ Greeting           <span class="tok-c">-- declared, kept</span>
+│  └─ StrayThing         <span class="tok-c">-- not declared, DELETED</span>
+└─ SomeoneElsesFolder    <span class="tok-c">-- not declared, but left alone</span></code></pre>
+		<div class="note warn">
+			<strong>Class changes are a delete</strong>
+			<p>An instance's class cannot be changed in place. If a declared class no longer matches what is in the place, the old instance is destroyed and a new one is created, and anything that lived inside it goes with it.</p>
+		</div>
+
+		<h2 id="lifecycle">Connect and patch</h2>
+		<p>On connect the server sends a <code>hello</code>, then the whole tree. The plugin reconciles the place against it: creating what is missing, correcting properties, attributes and tags, and sweeping drift out of managed trees.</p>
+		<p>After that it only receives diffs. A save triggers a rebuild, the new tree is compared to the old one, and just the differences go out:</p>
+<pre><code>sync <span class="tok-a">+1 ~1 -0</span> (25 instances, 3 scripts)
+     <span class="tok-s">+ ReplicatedStorage/Shared/Inventory [ModuleScript]</span>
+     <span class="tok-k">~ StarterPlayer/StarterPlayerScripts/Client (Source)</span></code></pre>
+		<p>Editing one script sends one property update, not the tree. Patches carry adds, updates and removes, where an update lists exactly which properties, attributes and tags changed.</p>
+		<p>The file watcher debounces for 120ms, so a burst of writes from a formatter or a branch switch becomes one rebuild. It ignores <code>sourcemap.json</code>, dotfiles, and <code>target</code>, <code>node_modules</code> and <code>.git</code> folders. Editing anything under <code>scripts/</code> reloads the hook system before rebuilding.</p>
+		<p>Every file the project reads is tracked, not just source files. Changing a <code>meta.json</code>, an <code>init.meta.json</code>, an <code>.inst.json</code>, or the project file itself all trigger a rebuild. The project file is reloaded first, so editing <code>Include</code> or a service property takes effect straight away without restarting the server:</p>
+<pre><code>   info default.project.json changed, reloading
+   sync <span class="tok-a">+0 ~0 -1</span> (10 instances, 2 scripts)
+        <span class="tok-r">- ReplicatedStorage/Test</span></code></pre>
+		<p>Whichever project file you named when starting the server is the one being watched.</p>
+
+		<h2 id="review">The review</h2>
+		<p>Before the first sync of a connection, the plugin performs a <strong>dry run</strong>. It walks the whole tree and counts what it would do without changing anything, then shows you the list and waits.</p>
+		<p>Approve and it applies. Cancel and the connection is dropped. The place is left exactly as it was, rather than half matched.</p>
+		<p>That review happens once per connection. Live edits afterwards apply immediately, including deletions, so ordinary saves never interrupt you. Reconnecting brings the review back.</p>
+		<div class="note">
+			<strong>Everything is undoable</strong>
+			<p>Each sync and each patch is wrapped in a <code>ChangeHistoryService</code> recording, so a bad sync is one Ctrl+Z away.</p>
+		</div>
+		<p>Turn the review off with <em>review changes when connecting</em> in the settings panel if you would rather RoFlux always overwrite freely.</p>
+
+		<h2 id="playtests">Playtests</h2>
+		<p>RoFlux only runs in Studio's edit mode. Studio re-runs plugins for the playtest DataModel, so the plugin checks <code>RunService:IsEdit()</code> on startup and does nothing at all during a run. There is no syncing into a running game, and no duplicate plugin copies on the server and client.</p>
+		<p>If a change arrives while a run is in progress it is held rather than applied. When you stop the run, the plugin asks the server for a fresh sync and catches up in one go, so nothing you saved mid-playtest is lost.</p>
+
+		<h2 id="changes">Seeing what changed</h2>
+		<p>The server prints each operation as it happens, capped so a large sync cannot flood your terminal.</p>
+		<p>In Studio, the plugin keeps the same history in its <strong>Changes</strong> panel. Entries are grouped per sync with a timestamp, colour coded, and filterable:</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Mark</th><th>Meaning</th><th>Detail shown</th></tr></thead>
+			<tbody>
+				<tr><td><code>+</code></td><td>created</td><td>the class name</td></tr>
+				<tr><td><code>~</code></td><td>edited</td><td>which properties, <code>@attributes</code> and <code>#tags</code> changed</td></tr>
+				<tr><td><code>-</code></td><td>deleted</td><td>what it was</td></tr>
+				<tr><td><code>!</code></td><td>failed</td><td>why it could not be applied</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>Nothing routine is printed to the Studio console. Only real failures show up there, such as a property that does not exist or a class that cannot be created. The panel may well be closed when one happens.</p>
+
+		<h2 id="transport">Transport</h2>
+		<p>The plugin connects with <code>HttpService:CreateWebStreamClient</code> using <code>Enum.WebStreamClientType.WebSocket</code>. Messages that arrive before the connection is fully established are buffered and delivered in order, so the opening handshake is never dropped.</p>
+		<p>If the WebSocket client is unavailable, it falls back to HTTP long polling against the same port. Both paths carry the same messages, so the only difference is latency.</p>
+		<p>The server also exposes a few plain endpoints, useful for scripting or debugging:</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Endpoint</th><th>Returns</th></tr></thead>
+			<tbody>
+				<tr><td><code>GET /api/info</code></td><td>server version, protocol, project name and id, client count</td></tr>
+				<tr><td><code>GET /api/snapshot</code></td><td>the full tree as it would be sent on connect</td></tr>
+				<tr><td><code>GET /api/poll?cursor=N</code></td><td>messages since <code>N</code>, long polling up to 25 seconds</td></tr>
+				<tr><td><code>GET /roflux</code></td><td>the WebSocket endpoint</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>The server binds to <code>127.0.0.1</code> only. It is not reachable from another machine.</p>
+
+		<div class="pager">
+			<a href="project.html">&larr; Project format</a>
+			<a href="scripts.html">Script system &rarr;</a>
+		</div>
+	</main>
+</div>
+
+<footer>
+	<div class="wrap">
+		<div class="foot-grid">
+			<div>
+				<h6>Documentation</h6>
+				<a href="getting-started.html">Getting started</a>
+				<a href="project.html">Project format</a>
+				<a href="syncing.html">How syncing works</a>
+			</div>
+			<div>
+				<h6>Reference</h6>
+				<a href="scripts.html">Script system</a>
+				<a href="cli.html">CLI commands</a>
+				<a href="edge-cases.html">Edge cases</a>
+			</div>
+			<div>
+				<h6>Project</h6>
+				<a href="index.html">Home</a>
+			</div>
+		</div>
+		<p class="foot-note">RoFlux syncs one way, from your editor into Roblox Studio.</p>
+	</div>
+</footer>
+
+</body>
+</html>

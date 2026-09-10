@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Getting started &middot; RoFlux</title>
+<link rel="icon" href="assets/RoFlux_icon_512.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav class="nav">
+	<div class="wrap nav-inner">
+		<a class="nav-logo" href="index.html"><img src="assets/RoFlux_wordmark.png" alt="RoFlux"></a>
+		<div class="nav-links">
+			<a href="getting-started.html" class="active">Get started</a>
+			<a href="project.html">Project format</a>
+			<a href="syncing.html">Syncing</a>
+			<a href="scripts.html">Scripts</a>
+			<a href="cli.html">CLI</a>
+			<a href="edge-cases.html">Edge cases</a>
+		</div>
+	</div>
+</nav>
+
+<div class="wrap docs">
+	<aside class="side">
+		<h5>Guides</h5>
+		<a href="getting-started.html" class="active">Getting started</a>
+		<a href="project.html">Project format</a>
+		<a href="syncing.html">How syncing works</a>
+		<a href="scripts.html">Script system</a>
+		<h5>Reference</h5>
+		<a href="cli.html">CLI commands</a>
+		<a href="edge-cases.html">Edge cases</a>
+		<h5>On this page</h5>
+		<a href="#build">Build the server</a>
+		<a href="#plugin">Install the plugin</a>
+		<a href="#project">Make a project</a>
+		<a href="#connect">Connect</a>
+		<a href="#review">The first sync</a>
+		<a href="#editor">Editor setup</a>
+	</aside>
+
+	<main class="content">
+		<h1>Getting started</h1>
+		<p class="lede">RoFlux is two pieces: a server that watches your folder, and a Studio plugin that receives what it sends. The plugin lives inside the server binary, so you only ever install one thing.</p>
+
+		<h2 id="build">Build the server</h2>
+		<p>RoFlux is a Rust program. You need a Rust toolchain, and a C++ compiler because the Luau runtime used by the script system is built from source.</p>
+<pre><code>cargo build --release --manifest-path Server/Cargo.toml</code></pre>
+		<p>The binary lands at <code>Server/target/release/roflux</code>. Put it on your <code>PATH</code> if you want to type <code>roflux</code> instead of the full path.</p>
+
+		<h2 id="plugin">Install the Studio plugin</h2>
+<pre><code>roflux plugin</code></pre>
+		<p>This writes <code>RoFlux.rbxm</code> into your local Studio plugins folder, replacing any previous copy:</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Platform</th><th>Location</th></tr></thead>
+			<tbody>
+				<tr><td>Windows</td><td><code>%LOCALAPPDATA%\Roblox\Plugins</code></td></tr>
+				<tr><td>macOS</td><td><code>~/Documents/Roblox/Plugins</code></td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>Restart Studio afterwards so it picks the plugin up. Because the plugin source is compiled into the binary, the installed plugin always matches the server version you are running. Rebuild the server, run <code>roflux plugin</code> again, and they stay in step.</p>
+		<div class="note">
+			<strong>Studio needs HTTP enabled</strong>
+			<p>The plugin talks to <code>127.0.0.1</code>. If requests are blocked, turn on <em>Allow HTTP Requests</em> in Game Settings &rarr; Security.</p>
+		</div>
+
+		<h2 id="project">Make a project</h2>
+<pre><code>roflux init MyGame</code></pre>
+		<p>That creates a <code>default.project.json</code>, an empty <code>scripts/</code> folder for compile time hooks, a <code>types.d.luau</code>, and a <code>.vscode/settings.json</code> wired up for luau-lsp.</p>
+		<p>Add some code:</p>
+<pre><code>MyGame/
+├─ default.project.json
+├─ scripts/
+└─ Shared/
+   ├─ init.meta.json     <span class="tok-c">-- { "$Parent": "ReplicatedStorage" }</span>
+   └─ Greeting.luau</code></pre>
+		<p>Then start the server:</p>
+<pre><code>roflux serve MyGame</code></pre>
+		<p>It prints the tree size, begins watching, and listens on port <code>34872</code>.</p>
+
+		<h2 id="connect">Connect from Studio</h2>
+		<p>Open the place you want to sync into, click <strong>RoFlux</strong> on the plugins toolbar, check the host and port, and press <strong>Connect</strong>.</p>
+		<div class="note warn">
+			<strong>Edit mode only</strong>
+			<p>RoFlux does nothing during a playtest. Studio re-runs plugins for the play DataModel, so the plugin checks <code>RunService:IsEdit()</code> and stays out of the way. Anything that arrives while a run is in progress is held, and when you stop the run it asks the server for a fresh sync and catches up.</p>
+		</div>
+
+		<h2 id="review">The first sync</h2>
+		<p>On connecting, the plugin does a dry run before touching anything and shows you every instance the sync would create, edit or delete. Approve it and the place is brought in line. Cancel and the connection is dropped, rather than leaving the place half matched.</p>
+		<p>That review happens <strong>once per connection</strong>. Everything after it applies immediately, so ordinary saves never interrupt you. Reconnect and you get the review again.</p>
+		<p>You can turn the review off entirely with <em>review changes when connecting</em> in the plugin's settings panel, which lets RoFlux overwrite freely.</p>
+		<p>Every change is recorded in the plugin's <strong>Changes</strong> panel, grouped per sync and filterable by created, edited, deleted and failed. Nothing routine is printed to the Studio console. Only real failures show up there.</p>
+
+		<h2 id="editor">Editor setup</h2>
+		<p>Every compile writes <code>sourcemap.json</code> and refreshes <code>.vscode/settings.json</code> so luau-lsp resolves your tree:</p>
+<pre><code>{
+  <span class="tok-s">"luau-lsp.types.definitionFiles"</span>: { <span class="tok-s">"RoFlux"</span>: <span class="tok-s">"types.d.luau"</span> },
+  <span class="tok-s">"luau-lsp.platform.type"</span>: <span class="tok-s">"roblox"</span>,
+  <span class="tok-s">"luau-lsp.sourcemap.enabled"</span>: <span class="tok-k">true</span>,
+  <span class="tok-s">"luau-lsp.sourcemap.autogenerate"</span>: <span class="tok-k">false</span>
+}</code></pre>
+		<p><code>autogenerate</code> is off because RoFlux writes the sourcemap itself. Existing keys in that file are kept. Only the ones above are set.</p>
+		<p>The generated <code>types.d.luau</code> declares the <code>roflux</code> global used by hook scripts, so <code>scripts/</code> gets full autocomplete.</p>
+		<div class="note">
+			<strong>Sourcemap typing uses dot access</strong>
+			<p><code>script.Child</code> resolves against the sourcemap and gives you a typed instance. <code>script:FindFirstChild("Child")</code> is always typed as <code>Instance?</code> no matter what the sourcemap says. That is how luau-lsp works, not something RoFlux controls.</p>
+		</div>
+
+		<div class="pager">
+			<span></span>
+			<a href="project.html">Project format &rarr;</a>
+		</div>
+	</main>
+</div>
+
+<footer>
+	<div class="wrap">
+		<div class="foot-grid">
+			<div>
+				<h6>Documentation</h6>
+				<a href="getting-started.html">Getting started</a>
+				<a href="project.html">Project format</a>
+				<a href="syncing.html">How syncing works</a>
+			</div>
+			<div>
+				<h6>Reference</h6>
+				<a href="scripts.html">Script system</a>
+				<a href="cli.html">CLI commands</a>
+				<a href="edge-cases.html">Edge cases</a>
+			</div>
+			<div>
+				<h6>Project</h6>
+				<a href="index.html">Home</a>
+			</div>
+		</div>
+		<p class="foot-note">RoFlux syncs one way, from your editor into Roblox Studio.</p>
+	</div>
+</footer>
+
+</body>
+</html>

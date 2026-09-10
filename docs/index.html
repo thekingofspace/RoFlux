@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RoFlux</title>
+<meta name="description" content="One way syncing from your editor into Roblox Studio, with a compile time script system.">
+<link rel="icon" href="assets/RoFlux_icon_512.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav class="nav">
+	<div class="wrap nav-inner">
+		<a class="nav-logo" href="index.html"><img src="assets/RoFlux_wordmark.png" alt="RoFlux"></a>
+		<div class="nav-links">
+			<a href="getting-started.html">Get started</a>
+			<a href="project.html">Project format</a>
+			<a href="syncing.html">Syncing</a>
+			<a href="scripts.html">Scripts</a>
+			<a href="cli.html">CLI</a>
+			<a href="edge-cases.html">Edge cases</a>
+		</div>
+	</div>
+</nav>
+
+<header class="hero">
+	<div class="wrap">
+		<img class="mark" src="assets/RoFlux_wordmark.png" alt="RoFlux">
+		<p class="tagline">One way syncing from your editor into Roblox Studio. The server owns the truth, Studio only ever receives.</p>
+		<div class="buttons">
+			<a class="btn primary" href="getting-started.html">Get started</a>
+			<a class="btn" href="scripts.html">The script system</a>
+		</div>
+	</div>
+</header>
+
+<section>
+	<div class="wrap">
+		<h2>Write code where you want to write it</h2>
+		<p class="lede">Keep your game on disk, in real files, under version control, in the editor you already use. RoFlux watches the folder and pushes every change into Studio as it happens.</p>
+<pre><code><span class="tok-c">$</span> roflux serve
+     ok TestProject loaded, 24 instances, 3 scripts
+   info watching C:\dev\TestProject
+     ok listening on http://127.0.0.1:34872
+   sync studio connected (1 total)
+   sync <span class="tok-a">+1 ~1 -0</span> (25 instances, 3 scripts)
+        <span class="tok-s">+ ReplicatedStorage/Shared/Inventory [ModuleScript]</span>
+        <span class="tok-k">~ StarterPlayer/StarterPlayerScripts/Client (Source)</span></code></pre>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<h2>What makes it different</h2>
+		<div class="grid">
+			<div class="card">
+				<h3>One direction, always</h3>
+				<p>Studio never tells the server anything about the place. Files are the source of truth, so there is no merge, no conflict, and no chance of Studio quietly overwriting your work.</p>
+			</div>
+			<div class="card">
+				<h3>It only touches what you declared</h3>
+				<p>Every instance is managed, passthrough or a reference. RoFlux deletes drift inside the trees you own and leaves everything else in the place completely alone.</p>
+			</div>
+			<div class="card">
+				<h3>Scripts that run at compile time</h3>
+				<p>Hook into reads, writes and file events. Rewrite source on its way out, or claim a file extension and turn it into a whole tree of instances.</p>
+			</div>
+			<div class="card">
+				<h3>The sourcemap is the model</h3>
+				<p><code>sourcemap.json</code> is regenerated on every rebuild and is what luau-lsp reads, so types and autocomplete follow your files without a second tool.</p>
+			</div>
+			<div class="card">
+				<h3>Place and model files</h3>
+				<p><code>roflux build</code> writes real <code>.rbxl</code> and <code>.rbxm</code> files with properly typed properties, so the same project can go straight to a build pipeline.</p>
+			</div>
+			<div class="card">
+				<h3>The plugin ships in the binary</h3>
+				<p><code>roflux plugin</code> installs the Studio plugin from the server executable itself, so the plugin you are running always matches the server you are running.</p>
+			</div>
+		</div>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<h2>A project is just files</h2>
+		<p class="lede">There is no giant manifest describing your tree. A file becomes an instance, a folder becomes a folder, and a small <code>meta.json</code> says where a tree belongs and what it is.</p>
+<pre><code>MyGame/
+├─ default.project.json      <span class="tok-c">-- project info and service properties</span>
+├─ scripts/                  <span class="tok-c">-- compile time hooks</span>
+│  └─ banner.luau
+├─ Shared/
+│  ├─ init.meta.json         <span class="tok-c">-- { "$Parent": "ReplicatedStorage" }</span>
+│  ├─ Inventory.luau         <span class="tok-c">-- ModuleScript</span>
+│  └─ Signal/
+│     ├─ init.luau           <span class="tok-c">-- the folder becomes a ModuleScript</span>
+│     └─ Connection.luau     <span class="tok-c">-- a child of it</span>
+└─ Server/
+   ├─ init.meta.json         <span class="tok-c">-- { "$Parent": "ServerScriptService" }</span>
+   └─ Main.server.luau       <span class="tok-c">-- Script</span></code></pre>
+		<p><a href="project.html">Read the project format &rarr;</a></p>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<h2>Turn any file into instances</h2>
+		<p class="lede">A hook script can claim an extension and return a declaration. One file can build a whole subtree, and every instance it produces is traced back to that file, so editing it patches only what changed and deleting it removes everything it made.</p>
+<pre><code><span class="tok-k">roflux</span>.transpile(<span class="tok-s">"html"</span>, <span class="tok-k">function</span>(file)
+	<span class="tok-k">local</span> screen = { [<span class="tok-s">"$ClassName"</span>] = <span class="tok-s">"Frame"</span> }
+
+	<span class="tok-k">for</span> tag, body <span class="tok-k">in</span> file.text:gmatch(<span class="tok-s">"&lt;(%a[%w]*)[^&gt;]*&gt;%s*([^&lt;]*)%s*&lt;/"</span>) <span class="tok-k">do</span>
+		screen[tag] = {
+			[<span class="tok-s">"$ClassName"</span>] = <span class="tok-s">"TextLabel"</span>,
+			[<span class="tok-s">"$Properties"</span>] = { Text = body },
+		}
+	<span class="tok-k">end</span>
+
+	<span class="tok-k">return</span> screen
+<span class="tok-k">end</span>)</code></pre>
+		<p><a href="scripts.html">Read about the script system &rarr;</a></p>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<h2>Three commands to get going</h2>
+<pre><code><span class="tok-c">-- build the server</span>
+cargo build --release --manifest-path Server/Cargo.toml
+
+<span class="tok-c">-- install the Studio plugin out of the binary</span>
+roflux plugin
+
+<span class="tok-c">-- start syncing</span>
+roflux serve MyGame</code></pre>
+		<p>Then open Studio, click the RoFlux button, and press Connect.</p>
+		<p><a href="getting-started.html">Full setup &rarr;</a></p>
+	</div>
+</section>
+
+<footer>
+	<div class="wrap">
+		<div class="foot-grid">
+			<div>
+				<h6>Documentation</h6>
+				<a href="getting-started.html">Getting started</a>
+				<a href="project.html">Project format</a>
+				<a href="syncing.html">How syncing works</a>
+			</div>
+			<div>
+				<h6>Reference</h6>
+				<a href="scripts.html">Script system</a>
+				<a href="cli.html">CLI commands</a>
+				<a href="edge-cases.html">Edge cases</a>
+			</div>
+			<div>
+				<h6>Project</h6>
+				<a href="index.html">Home</a>
+			</div>
+		</div>
+		<p class="foot-note">RoFlux syncs one way, from your editor into Roblox Studio.</p>
+	</div>
+</footer>
+
+</body>
+</html>

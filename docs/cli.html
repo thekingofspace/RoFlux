@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLI commands &middot; RoFlux</title>
+<link rel="icon" href="assets/RoFlux_icon_512.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav class="nav">
+	<div class="wrap nav-inner">
+		<a class="nav-logo" href="index.html"><img src="assets/RoFlux_wordmark.png" alt="RoFlux"></a>
+		<div class="nav-links">
+			<a href="getting-started.html">Get started</a>
+			<a href="project.html">Project format</a>
+			<a href="syncing.html">Syncing</a>
+			<a href="scripts.html">Scripts</a>
+			<a href="cli.html" class="active">CLI</a>
+			<a href="edge-cases.html">Edge cases</a>
+		</div>
+	</div>
+</nav>
+
+<div class="wrap docs">
+	<aside class="side">
+		<h5>Guides</h5>
+		<a href="getting-started.html">Getting started</a>
+		<a href="project.html">Project format</a>
+		<a href="syncing.html">How syncing works</a>
+		<a href="scripts.html">Script system</a>
+		<h5>Reference</h5>
+		<a href="cli.html" class="active">CLI commands</a>
+		<a href="edge-cases.html">Edge cases</a>
+		<h5>On this page</h5>
+		<a href="#naming">Naming a project</a>
+		<a href="#serve">serve</a>
+		<a href="#compile">compile</a>
+		<a href="#build">build</a>
+		<a href="#plugin">plugin</a>
+		<a href="#init">init</a>
+		<a href="#shared">Shared options</a>
+		<a href="#output">Reading the output</a>
+	</aside>
+
+	<main class="content">
+		<h1>CLI commands</h1>
+		<p class="lede">Five commands. Every one that reads a project takes a project name as its first argument, and adds <code>.project.json</code> for you.</p>
+
+		<h2 id="naming">Naming a project</h2>
+<pre><code>roflux serve            <span class="tok-c">-- default.project.json</span>
+roflux serve game       <span class="tok-c">-- game.project.json</span>
+roflux serve lobby      <span class="tok-c">-- lobby.project.json</span></code></pre>
+		<p>The argument is resolved like this, in order:</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>You write</th><th>RoFlux uses</th></tr></thead>
+			<tbody>
+				<tr><td>nothing</td><td><code>default.project.json</code> in the current folder</td></tr>
+				<tr><td><code>game</code></td><td><code>game.project.json</code> in the current folder</td></tr>
+				<tr><td><code>places/lobby</code></td><td><code>places/lobby.project.json</code></td></tr>
+				<tr><td><code>game.project.json</code></td><td>that exact file</td></tr>
+				<tr><td>a folder name</td><td><code>default.project.json</code> inside it</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>The project root is the folder holding the project file, so that is what gets watched and scanned. If the file is not there, RoFlux stops and tells you to run <code>roflux init</code> rather than quietly building nothing.</p>
+
+		<h2 id="serve">serve</h2>
+		<p>Watch the project and stream changes into Studio. This is the one you leave running.</p>
+<pre><code>roflux serve [project] [--port 34872] [--quiet]</code></pre>
+		<p>It compiles once at startup, writes the sourcemap, starts watching the folder, and listens on <code>127.0.0.1</code>. Any change on disk causes a rebuild, and only the difference is sent to connected plugins.</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Option</th><th>Meaning</th></tr></thead>
+			<tbody>
+				<tr><td><code>-p</code>, <code>--port</code></td><td>Port to listen on. Defaults to <code>34872</code>.</td></tr>
+				<tr><td><code>-q</code>, <code>--quiet</code></td><td>Silence all output.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>Stop it with Ctrl+C.</p>
+
+		<h2 id="compile">compile</h2>
+		<p>Compile once and exit. Useful in a pre commit hook, in CI, or any time you just want a fresh sourcemap.</p>
+<pre><code>roflux compile [project] [--quiet]</code></pre>
+		<p>This writes <code>sourcemap.json</code>, refreshes <code>types.d.luau</code> and <code>.vscode/settings.json</code>, and reports any problems it found in the project. It does not need Studio and does not open a port.</p>
+
+		<h2 id="build">build</h2>
+		<p>Write the project out as a real Roblox file.</p>
+<pre><code>roflux build [project] --output Game.rbxl</code></pre>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Extension</th><th>Format</th></tr></thead>
+			<tbody>
+				<tr><td><code>.rbxl</code></td><td>Binary place file.</td></tr>
+				<tr><td><code>.rbxlx</code></td><td>XML place file.</td></tr>
+				<tr><td><code>.rbxm</code></td><td>Binary model file.</td></tr>
+				<tr><td><code>.rbxmx</code></td><td>XML model file.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>Properties are given real Roblox types here, looked up in a reflection database rather than guessed. If a property name is not real for its class, RoFlux warns and leaves it out of the file rather than writing something broken.</p>
+		<p>Reference nodes are skipped, since they describe content that already exists in a place rather than content RoFlux owns.</p>
+		<p>This is how you build each place of a multi place game:</p>
+<pre><code>roflux build lobby -o build/Lobby.rbxl
+roflux build main  -o build/Main.rbxl</code></pre>
+
+		<h2 id="plugin">plugin</h2>
+		<p>Install the Studio plugin, which is compiled into the server binary.</p>
+<pre><code>roflux plugin [--output path.rbxm] [--to folder]</code></pre>
+		<p>With no options it writes <code>RoFlux.rbxm</code> into your local Studio plugins folder, replacing any copy already there. Restart Studio to pick it up.</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Option</th><th>Meaning</th></tr></thead>
+			<tbody>
+				<tr><td><code>-o</code>, <code>--output</code></td><td>Write the model to this exact path instead of installing it.</td></tr>
+				<tr><td><code>-t</code>, <code>--to</code></td><td>Install into a different plugins folder.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>Because the plugin source lives in the binary, the installed plugin always matches the server. There is no separate download to keep in step.</p>
+
+		<h2 id="init">init</h2>
+		<p>Set up a new project.</p>
+<pre><code>roflux init [project]</code></pre>
+		<p>Creates a <code>default.project.json</code> if there is not one, makes an empty <code>scripts/</code> folder, and writes <code>types.d.luau</code> and <code>.vscode/settings.json</code>. It never overwrites a project file that already exists.</p>
+
+		<h2 id="shared">Shared options</h2>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Option</th><th>Applies to</th><th>Meaning</th></tr></thead>
+			<tbody>
+				<tr><td><code>[project]</code></td><td>serve, compile, build</td><td>Project name. Defaults to <code>default</code>.</td></tr>
+				<tr><td><code>--quiet</code></td><td>serve, compile, build</td><td>No output at all.</td></tr>
+				<tr><td><code>--help</code></td><td>everything</td><td>Usage for that command.</td></tr>
+				<tr><td><code>--version</code></td><td>top level</td><td>Server version.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>Colour is used when the output is a terminal. Set <code>NO_COLOR</code> to turn it off, or pipe the output somewhere and it turns itself off.</p>
+
+		<h2 id="output">Reading the output</h2>
+<pre><code>   info loaded 2 hook scripts
+     ok MyGame loaded, 24 instances, 3 scripts
+   info watching C:\dev\MyGame
+     ok listening on http://127.0.0.1:34872
+   sync studio connected (1 total)
+   sync <span class="tok-a">+1 ~1 -0</span> (25 instances, 3 scripts)
+        <span class="tok-s">+ ReplicatedStorage/Shared/Inventory [ModuleScript]</span>
+        <span class="tok-k">~ StarterPlayer/StarterPlayerScripts/Client (Source)</span></code></pre>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Tag</th><th>Meaning</th></tr></thead>
+			<tbody>
+				<tr><td><code>info</code></td><td>Something normal happened.</td></tr>
+				<tr><td><code>ok</code></td><td>A step finished.</td></tr>
+				<tr><td><code>sync</code></td><td>Traffic with Studio, or a patch going out.</td></tr>
+				<tr><td><code>hook</code></td><td>Output from one of your hook scripts.</td></tr>
+				<tr><td><code>warn</code></td><td>Something in the project looks wrong, but the build carried on.</td></tr>
+				<tr><td><code>error</code></td><td>A step failed.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>A sync line shows counts first, then up to 25 of the actual changes. <code>+</code> is created, <code>~</code> is edited with the changed fields in brackets, and <code>-</code> is deleted.</p>
+
+		<div class="pager">
+			<a href="scripts.html">&larr; Script system</a>
+			<a href="edge-cases.html">Edge cases &rarr;</a>
+		</div>
+	</main>
+</div>
+
+<footer>
+	<div class="wrap">
+		<div class="foot-grid">
+			<div>
+				<h6>Documentation</h6>
+				<a href="getting-started.html">Getting started</a>
+				<a href="project.html">Project format</a>
+				<a href="syncing.html">How syncing works</a>
+			</div>
+			<div>
+				<h6>Reference</h6>
+				<a href="scripts.html">Script system</a>
+				<a href="cli.html">CLI commands</a>
+				<a href="edge-cases.html">Edge cases</a>
+			</div>
+			<div>
+				<h6>Project</h6>
+				<a href="index.html">Home</a>
+			</div>
+		</div>
+		<p class="foot-note">RoFlux syncs one way, from your editor into Roblox Studio.</p>
+	</div>
+</footer>
+
+</body>
+</html>
