@@ -1,0 +1,96 @@
+name: Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Label for the download, e.g. v0.1.0"
+        required: false
+        default: ""
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux
+            binary: roflux
+            output: roflux-linux-x86_64
+          - os: windows-latest
+            label: windows
+            binary: roflux.exe
+            output: roflux-windows-x86_64.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: Server
+
+      - name: Build
+        run: cargo build --release --manifest-path Server/Cargo.toml
+
+      - name: Collect binary
+        shell: bash
+        run: |
+          mkdir -p staging
+          cp "Server/target/release/${{ matrix.binary }}" "staging/${{ matrix.output }}"
+
+      - name: Build the Studio plugin
+        if: matrix.label == 'linux'
+        shell: bash
+        run: |
+          chmod +x staging/${{ matrix.output }}
+          ./staging/${{ matrix.output }} plugin --output staging/RoFlux.rbxm
+
+      - name: Check it runs
+        shell: bash
+        run: |
+          chmod +x staging/${{ matrix.output }} || true
+          ./staging/${{ matrix.output }} --version
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: part-${{ matrix.label }}
+          path: staging/*
+          if-no-files-found: error
+          retention-days: 7
+
+  bundle:
+    name: bundle
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: roflux
+          pattern: part-*
+          merge-multiple: true
+
+      - name: Show what was built
+        run: ls -lh roflux
+
+      - name: Name the download
+        id: name
+        run: |
+          label="${{ inputs.version }}"
+          if [ -z "$label" ]; then
+            label="${GITHUB_SHA::7}"
+          fi
+          echo "value=roflux-$label" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.name.outputs.value }}
+          path: roflux/*
+          if-no-files-found: error
+          retention-days: 30
