@@ -53,6 +53,7 @@ Full docs are in [`docs/`](docs/), servable with GitHub Pages.
 | [Project format](docs/project.html) | Files, directives, `meta.inst.json`, multiple places |
 | [How syncing works](docs/syncing.html) | Ownership, deletion, playtests, transport |
 | [Script system](docs/scripts.html) | Hooks, transpilers, reading files |
+| [Value types](docs/types.html) | How to write Color3, enums, UDim2 and every other type |
 | [CLI commands](docs/cli.html) | Every command and option |
 | [Edge cases](docs/edge-cases.html) | The things that surprise people |
 

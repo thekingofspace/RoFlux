@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Value types &middot; RoFlux</title>
+<link rel="icon" href="assets/RoFlux_icon_512.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav class="nav">
+	<div class="wrap nav-inner">
+		<a class="nav-logo" href="index.html"><img src="assets/RoFlux_wordmark.png" alt="RoFlux"></a>
+		<div class="nav-links">
+			<a href="getting-started.html">Get started</a>
+			<a href="project.html">Project format</a>
+			<a href="syncing.html">Syncing</a>
+			<a href="scripts.html">Scripts</a>
+			<a href="types.html" class="active">Types</a>
+			<a href="cli.html">CLI</a>
+			<a href="edge-cases.html">Edge cases</a>
+		</div>
+	</div>
+</nav>
+
+<div class="wrap docs">
+	<aside class="side">
+		<h5>Guides</h5>
+		<a href="getting-started.html">Getting started</a>
+		<a href="project.html">Project format</a>
+		<a href="syncing.html">How syncing works</a>
+		<a href="scripts.html">Script system</a>
+		<h5>Reference</h5>
+		<a href="types.html" class="active">Value types</a>
+		<a href="cli.html">CLI commands</a>
+		<a href="edge-cases.html">Edge cases</a>
+		<h5>On this page</h5>
+		<a href="#rule">The one rule</a>
+		<a href="#table">Quick reference</a>
+		<a href="#basic">Numbers and text</a>
+		<a href="#enums">Enums</a>
+		<a href="#colors">Colors</a>
+		<a href="#vectors">Vector3 and Vector2</a>
+		<a href="#udim">UDim</a>
+		<a href="#udim2">UDim2</a>
+		<a href="#cframe">CFrame</a>
+		<a href="#ranges">Ranges and sequences</a>
+		<a href="#fonts">Fonts</a>
+		<a href="#attributes">Attributes</a>
+		<a href="#type">Saying the type</a>
+		<a href="#builds">Syncing and place files</a>
+		<a href="#failed">When a value fails</a>
+	</aside>
+
+	<main class="content">
+		<h1>Value types</h1>
+		<p class="lede">Every property value in a project file is plain JSON. RoFlux looks at what type the property really is, and turns your JSON into that type for you. This page shows how to write each one.</p>
+		<p>You never write <code>Color3.new</code> or <code>Enum.Material.Neon</code>. You write <code>[255, 0, 0]</code> or <code>"Neon"</code>, and RoFlux works out the rest from the property it is going into.</p>
+
+		<h2 id="rule">The one rule to remember</h2>
+		<p>Inside a declaration, the shape of a value decides what it is.</p>
+		<ul>
+			<li>An <strong>object</strong> <code>{ }</code> is a child instance.</li>
+			<li>Anything else is a property. That means a number, text, <code>true</code> or <code>false</code>, or an array <code>[ ]</code>.</li>
+		</ul>
+		<p>So this does not do what it looks like:</p>
+<pre><code><span class="tok-s">"Floor"</span>: {
+    <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Part"</span>,
+    <span class="tok-s">"Size"</span>: { <span class="tok-s">"x"</span>: 4, <span class="tok-s">"y"</span>: 1, <span class="tok-s">"z"</span>: 4 }   <span class="tok-c">-- makes a child Folder called Size</span>
+}</code></pre>
+		<p>RoFlux sees an object and builds a child instance named <code>Size</code>. The part keeps its default size. Write it as an array instead, which is always a property:</p>
+<pre><code><span class="tok-s">"Size"</span>: [4, 1, 4]</code></pre>
+		<p>If you really want the object form, put it inside <code>$Properties</code>. Everything in there is a property, whatever its shape:</p>
+<pre><code><span class="tok-s">"$Properties"</span>: {
+    <span class="tok-s">"Size"</span>: { <span class="tok-s">"x"</span>: 4, <span class="tok-s">"y"</span>: 1, <span class="tok-s">"z"</span>: 4 }
+}</code></pre>
+		<div class="note">
+			<strong>Stick to arrays</strong>
+			<p>Every type on this page has an array form. Arrays work everywhere: in the shorthand, in <code>$Properties</code>, when syncing, and when building a place file. The object forms only exist for when you want the names spelled out.</p>
+		</div>
+
+		<h2 id="table">Quick reference</h2>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Type</th><th>Write it as</th><th>Example</th><th>Same as</th></tr></thead>
+			<tbody>
+				<tr><td>number</td><td>a number</td><td><code>"Transparency": 0.5</code></td><td></td></tr>
+				<tr><td>string</td><td>text</td><td><code>"Text": "Play"</code></td><td></td></tr>
+				<tr><td>boolean</td><td><code>true</code> or <code>false</code></td><td><code>"Anchored": true</code></td><td></td></tr>
+				<tr><td>Enum</td><td>the item name</td><td><code>"Material": "Neon"</code></td><td><code>Enum.Material.Neon</code></td></tr>
+				<tr><td>Color3</td><td><code>[r, g, b]</code></td><td><code>"Color": [255, 200, 40]</code></td><td><code>Color3.fromRGB(255, 200, 40)</code></td></tr>
+				<tr><td>BrickColor</td><td>the name</td><td><code>"BrickColor": "Bright red"</code></td><td><code>BrickColor.new("Bright red")</code></td></tr>
+				<tr><td>Vector3</td><td><code>[x, y, z]</code></td><td><code>"Size": [4, 1, 2]</code></td><td><code>Vector3.new(4, 1, 2)</code></td></tr>
+				<tr><td>Vector2</td><td><code>[x, y]</code></td><td><code>"AnchorPoint": [0.5, 0.5]</code></td><td><code>Vector2.new(0.5, 0.5)</code></td></tr>
+				<tr><td>UDim</td><td><code>[scale, offset]</code></td><td><code>"CornerRadius": [0.25, 0]</code></td><td><code>UDim.new(0.25, 0)</code></td></tr>
+				<tr><td>UDim2</td><td><code>[xScale, xOffset, yScale, yOffset]</code></td><td><code>"Size": [0.5, 0, 0, 40]</code></td><td><code>UDim2.new(0.5, 0, 0, 40)</code></td></tr>
+				<tr><td>CFrame</td><td><code>[x, y, z]</code></td><td><code>"CFrame": [0, 10, 0]</code></td><td><code>CFrame.new(0, 10, 0)</code></td></tr>
+				<tr><td>NumberRange</td><td><code>[min, max]</code></td><td><code>"Lifetime": [1, 3]</code></td><td><code>NumberRange.new(1, 3)</code></td></tr>
+				<tr><td>Rect</td><td><code>[minX, minY, maxX, maxY]</code></td><td><code>"SliceCenter": [10, 10, 20, 20]</code></td><td><code>Rect.new(10, 10, 20, 20)</code></td></tr>
+				<tr><td>asset</td><td>text</td><td><code>"Image": "rbxassetid://123"</code></td><td></td></tr>
+			</tbody>
+		</table>
+		</div>
+
+		<h2 id="basic">Numbers, text, and true or false</h2>
+		<p>These go straight through as they are.</p>
+<pre><code><span class="tok-s">"Transparency"</span>: 0.5,
+<span class="tok-s">"Text"</span>: <span class="tok-s">"Play"</span>,
+<span class="tok-s">"Anchored"</span>: <span class="tok-k">true</span>,
+<span class="tok-s">"LayoutOrder"</span>: 3</code></pre>
+		<div class="note warn">
+			<strong>true is not "true"</strong>
+			<p>Booleans must be real JSON <code>true</code> or <code>false</code>, with no quotes. The text <code>"true"</code> is read as false.</p>
+		</div>
+
+		<h2 id="enums">Enums</h2>
+		<p>Write just the name of the item. RoFlux already knows which enum the property uses, so you leave off the <code>Enum.Material.</code> part.</p>
+<pre><code><span class="tok-s">"Material"</span>: <span class="tok-s">"Neon"</span>,
+<span class="tok-s">"TextXAlignment"</span>: <span class="tok-s">"Left"</span>,
+<span class="tok-s">"Font"</span>: <span class="tok-s">"GothamBold"</span>,
+<span class="tok-s">"ScaleType"</span>: <span class="tok-s">"Fit"</span></code></pre>
+		<p>Names are case sensitive. <code>"Neon"</code> works and <code>"neon"</code> does not. Writing the full <code>"Enum.Material.Neon"</code> does not work either.</p>
+		<p>You can also give the number value, so <code>288</code> means the same as <code>"Neon"</code>. Names are much easier to read, though.</p>
+		<p>To find the right name, click the property in Studio's Properties window. The dropdown lists every item it accepts.</p>
+
+		<h2 id="colors">Colors</h2>
+		<h3>Color3</h3>
+		<p>Three numbers, for red, green and blue.</p>
+<pre><code><span class="tok-s">"Color"</span>: [255, 200, 40]      <span class="tok-c">-- 0 to 255, like Color3.fromRGB</span>
+<span class="tok-s">"Color"</span>: [1, 0.78, 0.16]     <span class="tok-c">-- 0 to 1, like Color3.new</span>
+<span class="tok-s">"Color"</span>: <span class="tok-s">"#FFC828"</span>           <span class="tok-c">-- hex, when syncing</span></code></pre>
+		<p>RoFlux picks the scale for you. If any of the three numbers is above 1, all three are read as 0 to 255. If all three are 1 or below, they are read as 0 to 1.</p>
+		<div class="note warn">
+			<strong>Watch out for small numbers</strong>
+			<p><code>[1, 0, 0]</code> is bright red, not almost black, because nothing in it is above 1. A mix like <code>[0.5, 200, 0]</code> is read as 0 to 255, so the 0.5 becomes almost nothing. Keep all three numbers on the same scale.</p>
+		</div>
+		<p>Hex needs all six digits. The <code>#</code> is optional. Short hex like <code>"#F00"</code> is not read.</p>
+
+		<h3>BrickColor</h3>
+		<p>The BrickColor name as text, like <code>"Bright red"</code> or <code>"Really black"</code>. Its number works too.</p>
+
+		<h2 id="vectors">Vector3 and Vector2</h2>
+<pre><code><span class="tok-s">"Size"</span>: [4, 1, 2]              <span class="tok-c">-- Vector3.new(4, 1, 2)</span>
+<span class="tok-s">"Position"</span>: [0, 10, 0]
+<span class="tok-s">"AnchorPoint"</span>: [0.5, 0.5]      <span class="tok-c">-- Vector2.new(0.5, 0.5)</span></code></pre>
+		<p>Any number you leave off becomes 0, so <code>[4, 1]</code> on a Vector3 gives <code>4, 1, 0</code>.</p>
+		<p>Inside <code>$Properties</code> you can also write <code>{ "x": 4, "y": 1, "z": 2 }</code>, with lowercase names.</p>
+		<p><code>Vector3int16</code> and <code>Vector2int16</code> take the same form.</p>
+
+		<h2 id="udim">UDim</h2>
+		<p>One axis of a UI size, written as scale then offset. Scale is a fraction of the parent. Offset is pixels.</p>
+<pre><code><span class="tok-s">"CornerRadius"</span>: [0.25, 0]      <span class="tok-c">-- UDim.new(0.25, 0)</span>
+<span class="tok-s">"PaddingLeft"</span>: [0, 12]         <span class="tok-c">-- UDim.new(0, 12)</span></code></pre>
+		<p>You see UDim on <code>UICorner</code>, <code>UIPadding</code>, the <code>Padding</code> of a <code>UIListLayout</code>, and similar.</p>
+
+		<h2 id="udim2">UDim2</h2>
+		<p>This is the one people mix up the most. It is four numbers, in the same order as <code>UDim2.new</code>:</p>
+<pre><code>[ xScale, xOffset, yScale, yOffset ]</code></pre>
+		<p>That is X scale, then X offset, then Y scale, then Y offset. It is not X, Y, X, Y.</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>In Luau</th><th>In RoFlux</th></tr></thead>
+			<tbody>
+				<tr><td><code>UDim2.new(0.5, 0, 0.5, 0)</code></td><td><code>[0.5, 0, 0.5, 0]</code></td></tr>
+				<tr><td><code>UDim2.fromScale(0.5, 0.25)</code></td><td><code>[0.5, 0, 0.25, 0]</code></td></tr>
+				<tr><td><code>UDim2.fromOffset(200, 50)</code></td><td><code>[0, 200, 0, 50]</code></td></tr>
+				<tr><td><code>UDim2.new(1, -20, 0, 40)</code></td><td><code>[1, -20, 0, 40]</code></td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>A handy way to remember it: <code>fromScale(x, y)</code> puts a 0 <em>after</em> each number, and <code>fromOffset(x, y)</code> puts a 0 <em>before</em> each number.</p>
+		<p>You can also write it as two UDims, which some people find easier to read:</p>
+<pre><code><span class="tok-s">"Size"</span>: [[0.5, 0], [0.25, 0]]</code></pre>
+		<p>Inside <code>$Properties</code> there is a named form as well, <code>{ "ScaleX": 0.5, "OffsetX": 0, "ScaleY": 0.25, "OffsetY": 0 }</code>.</p>
+
+		<h2 id="cframe">CFrame</h2>
+		<p>Three numbers give just a position:</p>
+<pre><code><span class="tok-s">"CFrame"</span>: [0, 10, 0]      <span class="tok-c">-- CFrame.new(0, 10, 0)</span></code></pre>
+		<p>To include rotation, give all twelve numbers that <code>CFrame:GetComponents()</code> returns. That is the position, then the nine numbers of the rotation.</p>
+<pre><code><span class="tok-s">"CFrame"</span>: [0, 10, 0,  1, 0, 0,  0, 1, 0,  0, 0, 1]</code></pre>
+		<p>The easy way to get these is to select the part, run <code>print(workspace.Part.CFrame:GetComponents())</code> in the command bar, and copy what it prints.</p>
+
+		<h2 id="ranges">Ranges and sequences</h2>
+		<h3>NumberRange</h3>
+<pre><code><span class="tok-s">"Lifetime"</span>: [1, 3]      <span class="tok-c">-- NumberRange.new(1, 3)</span></code></pre>
+		<p>When syncing, a single number also works, and sets the min and max to the same value.</p>
+
+		<h3>NumberSequence</h3>
+		<p>A single number gives a flat value. For a curve, give a list of points. Each point is <code>[time, value]</code>, with an optional third number for the envelope.</p>
+<pre><code><span class="tok-s">"Transparency"</span>: 0.5
+<span class="tok-s">"Transparency"</span>: [[0, 0], [0.5, 0.3], [1, 1]]</code></pre>
+
+		<h3>ColorSequence</h3>
+		<p>A list of <code>[time, color]</code> points. Each color can be hex or three numbers.</p>
+<pre><code><span class="tok-s">"Color"</span>: [[0, <span class="tok-s">"#FF0000"</span>], [1, [0, 0, 255]]]</code></pre>
+		<div class="note warn">
+			<strong>Sequences need a start and an end</strong>
+			<p>Give at least two points, with the first at time 0 and the last at time 1. Roblox rejects a sequence that does not run from 0 to 1, and the sync stops with an error. A sequence with only one point is ignored and comes out flat, as 0 or black.</p>
+		</div>
+
+		<h2 id="fonts">Fonts</h2>
+		<p>Text objects have two font properties, and they take different things.</p>
+		<p><code>Font</code> is the older enum, so it takes a name:</p>
+<pre><code><span class="tok-s">"Font"</span>: <span class="tok-s">"GothamBold"</span></code></pre>
+		<p><code>FontFace</code> is the newer <code>Font</code> type. Give it the font family, and if you like a weight and a style. Because the value is an object, it has to go inside <code>$Properties</code>:</p>
+<pre><code><span class="tok-s">"$Properties"</span>: {
+    <span class="tok-s">"FontFace"</span>: {
+        <span class="tok-s">"family"</span>: <span class="tok-s">"rbxasset://fonts/families/GothamSSm.json"</span>,
+        <span class="tok-s">"weight"</span>: <span class="tok-s">"Bold"</span>,
+        <span class="tok-s">"style"</span>: <span class="tok-s">"Italic"</span>
+    }
+}</code></pre>
+		<p>Weight is a <code>FontWeight</code> name such as <code>"Regular"</code>, <code>"SemiBold"</code> or <code>"Bold"</code>. Style is <code>"Normal"</code> or <code>"Italic"</code>. Both are optional.</p>
+
+		<h2 id="attributes">Attributes</h2>
+		<p>Attributes have no fixed type, so RoFlux cannot look one up. It goes by the shape of the value instead.</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>You write</th><th>You get</th></tr></thead>
+			<tbody>
+				<tr><td><code>"text"</code></td><td>string</td></tr>
+				<tr><td><code>12</code></td><td>number</td></tr>
+				<tr><td><code>true</code></td><td>boolean</td></tr>
+				<tr><td><code>[1, 2, 3]</code></td><td>Vector3</td></tr>
+				<tr><td><code>[1, 2]</code></td><td>Vector2</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>Anything else, like a color, needs <code>$Type</code>. Otherwise it is skipped.</p>
+<pre><code><span class="tok-s">"$Attributes"</span>: {
+    <span class="tok-s">"Tint"</span>: { <span class="tok-s">"$Type"</span>: <span class="tok-s">"Color3"</span>, <span class="tok-s">"$Value"</span>: [255, 0, 0] }
+}</code></pre>
+
+		<h2 id="type">Saying the type yourself</h2>
+		<p>When you want to be exact, wrap the value in <code>$Type</code> and <code>$Value</code>:</p>
+<pre><code><span class="tok-s">"Color"</span>: { <span class="tok-s">"$Type"</span>: <span class="tok-s">"Color3"</span>, <span class="tok-s">"$Value"</span>: [255, 0, 0] }</code></pre>
+		<p>An object holding <code>$Type</code> is always a property, never a child, so this is safe in the shorthand too. It is mostly useful for attributes, since a normal property already knows its own type.</p>
+		<p><code>$Type</code> can be any of these: <code>string</code>, <code>number</code>, <code>boolean</code>, <code>Color3</code>, <code>BrickColor</code>, <code>Vector3</code>, <code>Vector2</code>, <code>Vector3int16</code>, <code>Vector2int16</code>, <code>UDim</code>, <code>UDim2</code>, <code>CFrame</code>, <code>Rect</code>, <code>NumberRange</code>, <code>NumberSequence</code>, <code>ColorSequence</code> and <code>Font</code>. Enums are not on the list. For those, just write the name.</p>
+
+		<h2 id="builds">Syncing and place files</h2>
+		<p>Syncing converts values inside Studio, using the live property. <code>roflux build</code> converts them on its own, from a list of every Roblox property. Most types work the same both ways. A few are not handled by <code>roflux build</code> yet, and come out empty or at their default in the place file.</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Written as</th><th>Syncing</th><th>roflux build</th></tr></thead>
+			<tbody>
+				<tr><td>Arrays for vectors, UDim, UDim2, Color3, CFrame and Rect</td><td>yes</td><td>yes</td></tr>
+				<tr><td>Enum names and numbers</td><td>yes</td><td>yes</td></tr>
+				<tr><td>Objects inside <code>$Properties</code>, like <code>{ "x": 4 }</code></td><td>yes</td><td>yes</td></tr>
+				<tr><td>Hex colors like <code>"#FF0000"</code></td><td>yes</td><td>no, comes out black</td></tr>
+				<tr><td><code>$Type</code> values</td><td>yes</td><td>no</td></tr>
+				<tr><td>Named UDim2 like <code>{ "ScaleX": 0.5 }</code></td><td>yes</td><td>no, comes out zero</td></tr>
+				<tr><td>A single number for a NumberRange</td><td>yes</td><td>no, comes out zero</td></tr>
+				<tr><td>NumberSequence and ColorSequence</td><td>yes</td><td>no</td></tr>
+				<tr><td><code>FontFace</code></td><td>yes</td><td>no</td></tr>
+				<tr><td>Vector3int16 and Vector2int16</td><td>yes</td><td>no</td></tr>
+				<tr><td>Attributes that are text, numbers, booleans or Vector3</td><td>yes</td><td>yes</td></tr>
+				<tr><td>Vector2 and <code>$Type</code> attributes</td><td>yes</td><td>no</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>If you build place files, the safe choice is the array form for everything. That is the same advice as the rule at the top of this page.</p>
+
+		<h2 id="failed">When a value does not work</h2>
+		<p>Open the <strong>Changes</strong> panel in Studio and pick the <strong>Failed</strong> filter. Each failure names the instance and says what went wrong.</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Message</th><th>What it means</th></tr></thead>
+			<tbody>
+				<tr><td><code>Part has no property "Colr"</code></td><td>The property name is wrong for that class. Check the spelling and the capitals.</td></tr>
+				<tr><td><code>could not read a value for "Size"</code></td><td>The value is the wrong shape for its type. Compare it with this page.</td></tr>
+				<tr><td><code>"AbsoluteSize" would not accept its value</code></td><td>The shape was fine but Roblox refused it, usually because the property is read only.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>If a property quietly did nothing and there is no failure at all, check <a href="#rule">the rule at the top</a> first. An object in the shorthand makes a child instance instead of setting the property.</p>
+
+		<div class="pager">
+			<a href="scripts.html">&larr; Script system</a>
+			<a href="cli.html">CLI commands &rarr;</a>
+		</div>
+	</main>
+</div>
+
+<footer>
+	<div class="wrap">
+		<div class="foot-grid">
+			<div>
+				<h6>Documentation</h6>
+				<a href="getting-started.html">Getting started</a>
+				<a href="project.html">Project format</a>
+				<a href="syncing.html">How syncing works</a>
+			</div>
+			<div>
+				<h6>Reference</h6>
+				<a href="scripts.html">Script system</a>
+				<a href="types.html">Value types</a>
+				<a href="cli.html">CLI commands</a>
+				<a href="edge-cases.html">Edge cases</a>
+			</div>
+			<div>
+				<h6>Project</h6>
+				<a href="index.html">Home</a>
+			</div>
+		</div>
+		<p class="foot-note">RoFlux syncs one way, from your editor into Roblox Studio.</p>
+	</div>
+</footer>
+
+</body>
+</html>

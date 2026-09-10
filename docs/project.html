@@ -17,6 +17,7 @@
 			<a href="project.html" class="active">Project format</a>
 			<a href="syncing.html">Syncing</a>
 			<a href="scripts.html">Scripts</a>
+			<a href="types.html">Types</a>
 			<a href="cli.html">CLI</a>
 			<a href="edge-cases.html">Edge cases</a>
 		</div>
@@ -31,6 +32,7 @@
 		<a href="syncing.html">How syncing works</a>
 		<a href="scripts.html">Script system</a>
 		<h5>Reference</h5>
+		<a href="types.html">Value types</a>
 		<a href="cli.html">CLI commands</a>
 		<a href="edge-cases.html">Edge cases</a>
 		<h5>On this page</h5>
@@ -290,7 +292,7 @@ roflux build lobby --output Lobby.rbxl</code></pre>
 		<p>An unknown <code>$Key</code> whose value looks like a declaration is read as a child named without the <code>$</code>, and RoFlux warns. That catches a common typo rather than silently dropping your instance.</p>
 
 		<h2 id="values">Property values</h2>
-		<p>Values are plain JSON. The plugin coerces each one against the type the property actually has on the live instance, so you rarely need to say what a value is.</p>
+		<p>Values are plain JSON. RoFlux turns each one into the type the property really has, so you rarely need to say what a value is.</p>
 <pre><code>{
     <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Part"</span>,
     <span class="tok-s">"$Properties"</span>: {
@@ -301,10 +303,11 @@ roflux build lobby --output Lobby.rbxl</code></pre>
         <span class="tok-s">"Anchored"</span>: <span class="tok-k">true</span>
     }
 }</code></pre>
-		<p>Colour components above 1 are treated as 0&ndash;255. A hex string such as <code>"#3C91F5"</code> works too. When inference is not enough, be explicit:</p>
-<pre><code><span class="tok-s">"BackgroundColor3"</span>: { <span class="tok-s">"$Type"</span>: <span class="tok-s">"Color3"</span>, <span class="tok-s">"$Value"</span>: [1, 0, 0] }</code></pre>
-		<p>A property written as an object is normally read as a child, but an object holding <code>$Type</code> is always a property, so the explicit form works anywhere.</p>
-		<p>Supported types include <code>Vector3</code>, <code>Vector2</code>, <code>UDim</code>, <code>UDim2</code>, <code>Color3</code>, <code>BrickColor</code>, <code>CFrame</code>, <code>Rect</code>, <code>NumberRange</code>, <code>NumberSequence</code>, <code>ColorSequence</code>, <code>Font</code>, <code>Vector3int16</code> and <code>Vector2int16</code>.</p>
+		<p>That example uses <code>$Properties</code>, so the <code>Size</code> object is read as a property. Written straight into the declaration, an object would make a child instance instead. Arrays like <code>[4, 1, 4]</code> are always properties, which is why they are the safe choice.</p>
+		<div class="note">
+			<strong>How to write every type</strong>
+			<p>Colors, enums, UDim2, CFrames, sequences, fonts and attributes each have their own rules. The <a href="types.html">Value types</a> page covers every one with examples, including what <code>roflux build</code> does not handle yet.</p>
+		</div>
 
 		<h2 id="frommodel">$FromModel</h2>
 		<p>Declares content that already exists in the place so tooling knows about it. RoFlux <strong>never</strong> creates, edits or deletes these, and they are stripped out of the sync payload entirely. They exist purely so the sourcemap is complete.</p>
@@ -357,6 +360,7 @@ roflux build lobby --output Lobby.rbxl</code></pre>
 			<div>
 				<h6>Reference</h6>
 				<a href="scripts.html">Script system</a>
+				<a href="types.html">Value types</a>
 				<a href="cli.html">CLI commands</a>
 				<a href="edge-cases.html">Edge cases</a>
 			</div>
