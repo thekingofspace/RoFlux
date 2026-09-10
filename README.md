@@ -56,6 +56,20 @@ Full docs are in [`docs/`](docs/), servable with GitHub Pages.
 | [CLI commands](docs/cli.html) | Every command and option |
 | [Edge cases](docs/edge-cases.html) | The things that surprise people |
 
+## Building releases
+
+The **Build** workflow in Actions builds both platforms on demand. Run it from the Actions tab,
+optionally giving it a version label, and it produces one artifact holding everything:
+
+```
+roflux-v0.1.0/
+├─ roflux-linux-x86_64
+├─ roflux-windows-x86_64.exe
+└─ RoFlux.rbxm
+```
+
+Download that, then attach the files to a release.
+
 ## Layout
 
 | Path | What it is |
