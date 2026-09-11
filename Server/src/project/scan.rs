@@ -27,6 +27,7 @@ pub struct Scanner<'a> {
     files: Vec<PathBuf>,
     include: Vec<String>,
     exclude: Vec<String>,
+    mounted: Vec<PathBuf>,
 }
 
 struct Entry {
@@ -130,12 +131,17 @@ pub fn build_with(root: &Path, transform: &dyn Transform, config: &Config) -> Re
         files: Vec::new(),
         include: config.include.clone(),
         exclude: config.exclude.clone(),
+        mounted: Vec::new(),
     };
 
     for (path, declared) in &config.services {
         let mut built = Vec::new();
 
         for (name, child) in &declared.children {
+            if child.ignore {
+                continue;
+            }
+
             let class_name = child.class_name.clone().unwrap_or_else(|| "Folder".into());
             let mut node = Node::new("", name, class_name);
             apply_declaration(&mut node, child);
@@ -150,8 +156,18 @@ pub fn build_with(root: &Path, transform: &dyn Transform, config: &Config) -> Re
             built.push(node);
         }
 
+        let contents = match &declared.path {
+            Some(target) => scanner.contents(target, path)?,
+            None => None,
+        };
+
         let parts = paths::split(path);
-        let slot = tree.reserve(&parts, |_, part| part.to_string());
+        let slot = tree.reserve(&parts, container);
+
+        if let Some(contents) = contents {
+            fill(slot, contents);
+        }
+
         apply(slot, declared);
 
         for node in built {
@@ -192,6 +208,7 @@ pub fn build_folder(root: &Path, transform: &dyn Transform, name: &str) -> Resul
         files: Vec::new(),
         include: Vec::new(),
         exclude: Vec::new(),
+        mounted: Vec::new(),
     };
 
     let entry = scanner
@@ -205,9 +222,19 @@ pub fn build_folder(root: &Path, transform: &dyn Transform, name: &str) -> Resul
     Ok(node)
 }
 
+const CONTAINERS: &[&str] = &["StarterPlayerScripts", "StarterCharacterScripts"];
+
+fn container(depth: usize, part: &str) -> String {
+    if depth == 0 || CONTAINERS.contains(&part) {
+        part.to_string()
+    } else {
+        "Folder".into()
+    }
+}
+
 fn place(tree: &mut Tree, parent: &str, node: Node) {
     let parts = paths::split(parent);
-    let slot = tree.reserve(&parts, |_, part| part.to_string());
+    let slot = tree.reserve(&parts, container);
     attach(slot, node);
 }
 
@@ -215,6 +242,34 @@ fn attach(slot: &mut Node, node: Node) {
     match slot.child_index(&node.name) {
         Some(index) => merge(&mut slot.children[index], node),
         None => slot.children.push(node),
+    }
+}
+
+fn fill(slot: &mut Node, contents: Node) {
+    for (key, value) in contents.properties {
+        if key != "Source" {
+            slot.properties.insert(key, value);
+        }
+    }
+
+    for (key, value) in contents.attributes {
+        slot.attributes.insert(key, value);
+    }
+
+    for tag in contents.tags {
+        if !slot.tags.contains(&tag) {
+            slot.tags.push(tag);
+        }
+    }
+
+    for path in contents.file_paths {
+        if !slot.file_paths.contains(&path) {
+            slot.file_paths.push(path);
+        }
+    }
+
+    for child in contents.children {
+        attach(slot, child);
     }
 }
 
@@ -300,6 +355,10 @@ pub fn apply_declaration(node: &mut Node, declared: &Meta) {
     }
 
     for (name, child) in &declared.children {
+        if child.ignore {
+            continue;
+        }
+
         let class_name = child.class_name.clone().unwrap_or_else(|| "Folder".into());
         let mut built = Node::new("", name, class_name);
         built.ownership = node.ownership;
@@ -321,10 +380,36 @@ impl Scanner<'_> {
         self.include.iter().any(|entry| entry == name)
     }
 
+    fn remember(&mut self, path: &Path) {
+        self.mounted.push(path.canonicalize().unwrap_or_else(|_| path.to_path_buf()));
+    }
+
+    fn is_mounted(&self, path: &Path) -> bool {
+        let path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        self.mounted.contains(&path)
+    }
+
+    fn contents(&mut self, target: &str, service: &str) -> Result<Option<Node>> {
+        let path = self.root.join(target.replace('\\', "/"));
+
+        if !path.is_dir() {
+            log::warn(format!(
+                "\"{service}\" has $Path \"{target}\", which needs to be a folder that exists"
+            ));
+            return Ok(None);
+        }
+
+        self.remember(&path);
+
+        let name = paths::split(service).last().cloned().unwrap_or_default();
+        Ok(self.folder(&path, &name)?.map(|entry| entry.node))
+    }
+
     fn mount(&mut self, target: &str, name: &str) -> Result<Option<Node>> {
         let path = self.root.join(target.replace('\\', "/"));
 
         if path.is_dir() {
+            self.remember(&path);
             return Ok(self.folder(&path, name)?.map(|entry| entry.node));
         }
 
@@ -426,7 +511,7 @@ impl Scanner<'_> {
         }
 
         for (name, folder) in &folders {
-            if top && (name == "scripts" || !folder.join("init.meta.json").is_file()) {
+            if top && (name == "scripts" || !folder.join("init.meta.json").is_file() || self.is_mounted(folder)) {
                 continue;
             }
 

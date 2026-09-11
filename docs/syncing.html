@@ -86,6 +86,10 @@
 │  ├─ Greeting           <span class="tok-c">-- declared, kept</span>
 │  └─ StrayThing         <span class="tok-c">-- not declared, DELETED</span>
 └─ SomeoneElsesFolder    <span class="tok-c">-- not declared, but left alone</span></code></pre>
+		<h3>Moving things</h3>
+		<p>Changing a <code>$Parent</code> is a move. The copy in the new place is created and the old one is deleted, even when the old parent is a service that nothing else in your project uses.</p>
+		<p>This also works for moves made while you were not connected. The plugin keeps a short list of the top level instances it created for each project. It saves this list as an attribute named <code>RoFluxState</code> on <code>ServerStorage</code>, so it stays with the place file and adds nothing to the Explorer. When you connect again, anything on that list that your project no longer has is deleted, and it shows up in the review first.</p>
+		<p>The list starts the first time you sync with this version of the plugin. Leftovers made before that are not on it, so delete those by hand once.</p>
 		<div class="note warn">
 			<strong>Class changes are a delete</strong>
 			<p>An instance's class cannot be changed in place. If a declared class no longer matches what is in the place, the old instance is destroyed and a new one is created, and anything that lived inside it goes with it.</p>

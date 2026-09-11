@@ -350,6 +350,10 @@ fn single(decoded: &Value) -> Loaded {
     let mut children = Vec::new();
 
     for (name, child) in &parsed.children {
+        if child.ignore {
+            continue;
+        }
+
         let class_name = child.class_name.clone().unwrap_or_else(|| "Folder".into());
         let mut node = Node::new("", name, class_name);
         crate::project::scan::apply_declaration(&mut node, child);

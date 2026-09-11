@@ -45,6 +45,7 @@
 		<a href="#folders">Folders and init</a>
 		<a href="#meta">Metadata files</a>
 		<a href="#directives">Directives</a>
+		<a href="#d-where">Where they work</a>
 		<a href="#values">Property values</a>
 		<a href="#frommodel">$FromModel</a>
 		<a href="#path">$Path</a>
@@ -256,7 +257,7 @@ roflux build lobby --output Lobby.rbxl</code></pre>
 		<p>The instance takes the file's stem as its name unless you set <code>$Name</code>. A declaration with nothing in it produces nothing.</p>
 
 		<h2 id="directives">Directives</h2>
-		<p>Keys beginning with <code>$</code> are directives. Every other key is read one of two ways:</p>
+		<p>Keys beginning with <code>$</code> are directives. They tell RoFlux something about the instance instead of setting a property on it. Every other key is read one of two ways:</p>
 		<ul>
 			<li>an object means a <strong>child instance</strong></li>
 			<li>anything else means a <strong>property</strong></li>
@@ -272,25 +273,155 @@ roflux build lobby --output Lobby.rbxl</code></pre>
         <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"WeldConstraint"</span>
     }
 }</code></pre>
-		<p><code>$Properties</code> still works and is worth using when a property name would clash with a directive, or when you want the two kinds visually separated.</p>
 		<div class="table-wrap">
 		<table>
-			<thead><tr><th>Directive</th><th>Meaning</th></tr></thead>
+			<thead><tr><th>Directive</th><th>In short</th></tr></thead>
 			<tbody>
-				<tr><td><code>$ClassName</code></td><td>Class to create. Defaults to <code>Folder</code>.</td></tr>
-				<tr><td><code>$Parent</code></td><td>Where in the DataModel this tree goes, e.g. <code>StarterPlayer/StarterPlayerScripts</code>.</td></tr>
-				<tr><td><code>$Path</code></td><td>A file or folder to insert at this point.</td></tr>
-				<tr><td><code>$FromModel</code></td><td>Reference existing game content. Sourcemap only.</td></tr>
-				<tr><td><code>$Name</code></td><td>Override the instance name.</td></tr>
-				<tr><td><code>$Properties</code></td><td>Table of properties.</td></tr>
-				<tr><td><code>$Attributes</code></td><td>Table of attributes.</td></tr>
-				<tr><td><code>$Tags</code></td><td>Array of tags.</td></tr>
-				<tr><td><code>$Children</code></td><td>Explicit child table, for names that would collide with a directive.</td></tr>
-				<tr><td><code>$Ignore</code></td><td><code>true</code> skips this declaration entirely.</td></tr>
+				<tr><td><a href="#d-classname"><code>$ClassName</code></a></td><td>The class to create.</td></tr>
+				<tr><td><a href="#d-name"><code>$Name</code></a></td><td>The instance name.</td></tr>
+				<tr><td><a href="#d-parent"><code>$Parent</code></a></td><td>Where in the game it goes.</td></tr>
+				<tr><td><a href="#d-path"><code>$Path</code></a></td><td>A file or folder to put here.</td></tr>
+				<tr><td><a href="#d-frommodel"><code>$FromModel</code></a></td><td>Something already in the place. Sourcemap only.</td></tr>
+				<tr><td><a href="#d-properties"><code>$Properties</code></a></td><td>A table of properties.</td></tr>
+				<tr><td><a href="#d-attributes"><code>$Attributes</code></a></td><td>A table of attributes.</td></tr>
+				<tr><td><a href="#d-tags"><code>$Tags</code></a></td><td>A list of tags.</td></tr>
+				<tr><td><a href="#d-children"><code>$Children</code></a></td><td>A table of children.</td></tr>
+				<tr><td><a href="#d-ignore"><code>$Ignore</code></a></td><td>Skip this one.</td></tr>
+				<tr><td><a href="#d-type"><code>$Type</code> and <code>$Value</code></a></td><td>Say exactly what type a value is.</td></tr>
 			</tbody>
 		</table>
 		</div>
-		<p>An unknown <code>$Key</code> whose value looks like a declaration is read as a child named without the <code>$</code>, and RoFlux warns. That catches a common typo rather than silently dropping your instance.</p>
+
+		<h3 id="d-where">Where each one works</h3>
+		<p>Most directives work in every JSON file. A few only make sense in one place. "Child" means a declaration nested inside another one.</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Directive</th><th>Project file service</th><th>Project file child</th><th><code>init.meta.json</code></th><th><code>Thing.meta.json</code></th><th><code>Thing.inst.json</code></th><th>Nested child</th></tr></thead>
+			<tbody>
+				<tr><td><code>$ClassName</code></td><td>no</td><td>yes</td><td>yes</td><td>no</td><td>yes</td><td>yes</td></tr>
+				<tr><td><code>$Name</code></td><td>no</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td></tr>
+				<tr><td><code>$Parent</code></td><td>no</td><td>no</td><td>yes</td><td>yes</td><td>yes</td><td>no</td></tr>
+				<tr><td><code>$Path</code></td><td>yes</td><td>yes</td><td>no</td><td>no</td><td>no</td><td>no</td></tr>
+				<tr><td><code>$FromModel</code></td><td>no</td><td>yes</td><td>no</td><td>no</td><td>yes</td><td>yes</td></tr>
+				<tr><td><code>$Properties</code></td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td></tr>
+				<tr><td><code>$Attributes</code></td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td></tr>
+				<tr><td><code>$Tags</code></td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td></tr>
+				<tr><td><code>$Children</code></td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td></tr>
+				<tr><td><code>$Ignore</code></td><td>no</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>Where a directive does not work, it is simply not used. The reasons are in each section below. A declaration returned by a hook script's transpiler works like a <code>Thing.inst.json</code>.</p>
+
+		<h3 id="d-classname"><code>$ClassName</code></h3>
+		<p>The class of instance to create, like <code>"Part"</code>, <code>"ScreenGui"</code> or <code>"RemoteEvent"</code>. Leave it out and you get a <code>Folder</code>.</p>
+<pre><code>{ <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Configuration"</span> }</code></pre>
+		<ul>
+			<li>In an <code>init.meta.json</code>, it sets the class of the folder. If the folder has an <code>init</code> script, the script wins, so a folder with <code>init.luau</code> is always a <code>ModuleScript</code>.</li>
+			<li>In a sidecar like <code>Thing.meta.json</code>, the file beside it already decides the class. <code>Thing.luau</code> is always a <code>ModuleScript</code>.</li>
+			<li>A service in the project file is already a class, so it can not be changed.</li>
+		</ul>
+		<p>Changing the class of something that was already synced deletes it and creates a new one, along with everything inside it. See <a href="syncing.html#deletion">Deletion</a>.</p>
+
+		<h3 id="d-name"><code>$Name</code></h3>
+		<p>The name of the instance. Without it, the name comes from where the thing was declared:</p>
+		<ul>
+			<li>a file is named after its stem, so <code>Coins.server.luau</code> becomes <code>Coins</code></li>
+			<li>a folder is named after the folder</li>
+			<li>a child is named after its key</li>
+		</ul>
+<pre><code><span class="tok-c">-- hud/init.meta.json</span>
+{ <span class="tok-s">"$Name"</span>: <span class="tok-s">"HUD"</span> }</code></pre>
+		<p>It is also the way to use a name your computer will not allow in a file name, such as one with <code>:</code> or <code>?</code> in it. In <code>meta.inst.json</code>, every entry needs a <code>$Name</code>, or they would all be called <code>meta</code>.</p>
+
+		<h3 id="d-parent"><code>$Parent</code></h3>
+		<p>Where the thing goes in the game, written as a path with <code>/</code> between each part, starting from a service.</p>
+<pre><code><span class="tok-c">-- Client/init.meta.json</span>
+{ <span class="tok-s">"$Parent"</span>: <span class="tok-s">"StarterPlayer/StarterPlayerScripts"</span> }</code></pre>
+		<ul>
+			<li>It works at any depth. An <code>init.meta.json</code> deep inside your project can move its folder somewhere else entirely.</li>
+			<li>Any part of the path that does not exist yet is made as a <code>Folder</code>. RoFlux does not own those folders, so it will not delete other things you put in them.</li>
+			<li>Without it, a folder at the top of the project goes to the <code>Default</code> from the project file. Anything deeper stays inside the folder it sits in on disk.</li>
+			<li>Changing it is a move. The new copy is made and the old one is deleted, even if you changed it while not connected. See <a href="syncing.html#deletion">Moving things</a>.</li>
+		</ul>
+		<p>It is not used on children, because a child always goes inside the thing it is declared in. It is not used in the project file either, where the key already says where things go.</p>
+
+		<h3 id="d-path"><code>$Path</code></h3>
+		<p>A file or folder from your project to put at this point. It only works in the project file.</p>
+<pre><code>{
+    <span class="tok-s">"StarterGui"</span>: { <span class="tok-s">"$Path"</span>: <span class="tok-s">"GUI"</span> },
+    <span class="tok-s">"ServerScriptService"</span>: {
+        <span class="tok-s">"Main"</span>: { <span class="tok-s">"$Path"</span>: <span class="tok-s">"src/bootstrap.server.luau"</span> }
+    }
+}</code></pre>
+		<p>On a child, the file or folder becomes that child. On a service, the folder's contents go straight into the service. The full rules are in the <a href="#path">$Path</a> section below.</p>
+
+		<h3 id="d-frommodel"><code>$FromModel</code></h3>
+		<p>Describes something that is already in the place, such as a map you built by hand. It only puts it in the sourcemap, so your editor can autocomplete it. RoFlux never creates, changes or deletes it.</p>
+<pre><code><span class="tok-c">-- meta.inst.json</span>
+{ <span class="tok-s">"$FromModel"</span>: <span class="tok-s">"Workspace/Map"</span>, <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Model"</span> }</code></pre>
+		<p>In an <code>.inst.json</code> file, the value is the path to the thing in the game. On a child, the child is already placed by its key, so any value marks it as something that already exists. Everything inside a <code>$FromModel</code> is left alone too. The full rules are in the <a href="#frommodel">$FromModel</a> section below.</p>
+
+		<h3 id="d-properties"><code>$Properties</code></h3>
+		<p>A table of properties to set.</p>
+<pre><code>{
+    <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"TextLabel"</span>,
+    <span class="tok-s">"$Properties"</span>: {
+        <span class="tok-s">"Text"</span>: <span class="tok-s">"Coins"</span>,
+        <span class="tok-s">"FontFace"</span>: { <span class="tok-s">"family"</span>: <span class="tok-s">"rbxasset://fonts/families/GothamSSm.json"</span>, <span class="tok-s">"weight"</span>: <span class="tok-s">"Bold"</span> }
+    }
+}</code></pre>
+		<p>Most of the time you can skip it and write properties straight into the declaration. You need it when a property's value is an object, like <code>FontFace</code> above. Written straight in, an object would turn into a child instead. Arrays like <code>[1, 0, 0]</code> are always properties, so they are safe anywhere.</p>
+		<p>How to write each kind of value is on the <a href="types.html">Value types</a> page.</p>
+
+		<h3 id="d-attributes"><code>$Attributes</code></h3>
+		<p>A table of attributes to set, the ones you read with <code>GetAttribute</code>.</p>
+<pre><code>{
+    <span class="tok-s">"$Attributes"</span>: {
+        <span class="tok-s">"Version"</span>: <span class="tok-s">"1.2.0"</span>,
+        <span class="tok-s">"MaxCoins"</span>: 50,
+        <span class="tok-s">"Tint"</span>: { <span class="tok-s">"$Type"</span>: <span class="tok-s">"Color3"</span>, <span class="tok-s">"$Value"</span>: [255, 200, 0] }
+    }
+}</code></pre>
+		<p>Text, numbers and <code>true</code> or <code>false</code> just work. An attribute has no fixed type to guess from, so anything else, like a color, needs <code>$Type</code>. If you remove an attribute from the file while connected, it is removed from the instance too.</p>
+
+		<h3 id="d-tags"><code>$Tags</code></h3>
+		<p>A list of tags, the ones you use with <code>CollectionService</code>.</p>
+<pre><code>{ <span class="tok-s">"$Tags"</span>: [<span class="tok-s">"Coin"</span>, <span class="tok-s">"Spinning"</span>] }</code></pre>
+		<p>The list is the full set. Once an instance has <code>$Tags</code>, any tag on it that is not in the list is removed.</p>
+
+		<h3 id="d-children"><code>$Children</code></h3>
+		<p>A table of children, keyed by name. Every entry inside it is a child, whatever it looks like.</p>
+<pre><code>{
+    <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Folder"</span>,
+    <span class="tok-s">"$Children"</span>: {
+        <span class="tok-s">"$Money"</span>: { <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"IntValue"</span> },
+        <span class="tok-s">"Settings"</span>: { <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Configuration"</span> }
+    }
+}</code></pre>
+		<p>You only need it for a child whose name starts with <code>$</code>, since that would look like a directive. It is also handy for keeping children apart from properties in a big declaration.</p>
+
+		<h3 id="d-ignore"><code>$Ignore</code></h3>
+		<p>Set it to <code>true</code> to skip a declaration completely.</p>
+<pre><code><span class="tok-c">-- Experimental/init.meta.json</span>
+{ <span class="tok-s">"$Ignore"</span>: <span class="tok-k">true</span> }</code></pre>
+		<ul>
+			<li>In an <code>init.meta.json</code>, the whole folder and everything in it is skipped.</li>
+			<li>In a sidecar like <code>Thing.meta.json</code>, the file beside it is skipped.</li>
+			<li>On an entry or a child, just that one is skipped.</li>
+		</ul>
+		<p>If the thing was already synced, skipping it deletes it from the place, the same as deleting its file. Set it back to <code>false</code>, or remove the line, to bring it back. It does not work on a service in the project file, since a service can not be removed.</p>
+
+		<h3 id="d-type"><code>$Type</code> and <code>$Value</code></h3>
+		<p>These are not about the instance. They wrap a single value to say exactly what type it is.</p>
+<pre><code><span class="tok-s">"Tint"</span>: { <span class="tok-s">"$Type"</span>: <span class="tok-s">"Color3"</span>, <span class="tok-s">"$Value"</span>: [255, 0, 0] }</code></pre>
+		<p>An object with <code>$Type</code> is always a value, never a child, so it is safe to write straight into a declaration. You mostly need it for attributes. The list of types is on the <a href="types.html">Value types</a> page.</p>
+
+		<h3 id="d-project">Project file keys</h3>
+		<p>The top level of a project file has a few settings of its own. <code>ProjectID</code>, <code>Default</code>, <code>Include</code> and <code>Exclude</code> can also be written with a <code>$</code> in front, as <code>$ProjectID</code> and so on, and mean the same thing. <code>Name</code> and <code>Scripts</code> are written without one. These are covered in <a href="#manifest">default.project.json</a>.</p>
+
+		<h3 id="d-unknown">Typos</h3>
+		<p>An unknown <code>$Key</code> whose value looks like a declaration is read as a child named without the <code>$</code>, and RoFlux warns you. Any other unknown <code>$Key</code> is skipped with a warning. Either way a typo shows up in the output instead of quietly doing nothing.</p>
 
 		<h2 id="values">Property values</h2>
 		<p>Values are plain JSON. RoFlux turns each one into the type the property really has, so you rarely need to say what a value is.</p>
@@ -331,6 +462,15 @@ roflux build lobby --output Lobby.rbxl</code></pre>
     }
 }</code></pre>
 		<p>That produces <code>ServerScriptService.Main</code>, a <code>Script</code> holding the contents of <code>src/bootstrap.server.luau</code>. Paths are relative to the project root, and <code>$Path</code> reaches files the root rules would otherwise ignore. Pointing at a folder mounts the whole folder, init file and all. If the target does not exist, RoFlux warns and carries on.</p>
+		<h3>Filling a service from a folder</h3>
+		<p>Put <code>$Path</code> right on a service to pour a folder's contents straight into it:</p>
+<pre><code>{
+    <span class="tok-s">"StarterGui"</span>: {
+        <span class="tok-s">"$Path"</span>: <span class="tok-s">"GUI"</span>
+    }
+}</code></pre>
+		<p>Everything inside <code>GUI</code> lands directly in <code>StarterGui</code>, so <code>GUI/Hud</code> becomes <code>StarterGui.Hud</code>. There is no extra <code>GUI</code> folder in between. The folder does not need an <code>init.meta.json</code>. If it has one, its properties, attributes and tags are set on the service, and the folder is not also compiled somewhere else.</p>
+		<p>Each thing from the folder is managed, so deleting a file deletes its instance. The service itself stays passthrough, so anything else already in <code>StarterGui</code> is left alone. Here the path must be a folder, since a service can not be replaced by a file.</p>
 
 		<h2 id="sourcemap">The sourcemap</h2>
 		<p><code>sourcemap.json</code> is rewritten on every compile and every rebuild. It is what luau-lsp reads, and it is RoFlux's own picture of the project.</p>

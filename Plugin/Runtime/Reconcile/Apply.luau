@@ -363,30 +363,56 @@ local function container(parent: Instance, node: Node, report: Report): Instance
 	return built
 end
 
+function Apply.place(parent: Instance, node: Node, report: Report): Instance?
+	if node.ownership == "reference" then
+		return nil
+	end
+
+	if node.ownership == "managed" then
+		return Apply.node(parent, node, report)
+	end
+
+	local target = container(parent, node, report)
+
+	if not target then
+		return nil
+	end
+
+	settle(target, node, report, nil)
+	Apply.walk(target, node, report)
+
+	return target
+end
+
 function Apply.walk(parent: Instance, node: Node, report: Report)
 	for _, child in node.children or {} do
-		if child.ownership == "reference" then
-			continue
-		end
-
-		if child.ownership == "managed" then
-			Apply.node(parent, child, report)
-			continue
-		end
-
-		local target = container(parent, child, report)
-
-		if not target then
-			continue
-		end
-
-		settle(target, child, report, nil)
-		Apply.walk(target, child, report)
+		Apply.place(parent, child, report)
 	end
 end
 
-function Apply.tree(root: Node, preview: boolean?): Report
+local function forget(stale: { string }, report: Report)
+	for _, path in stale do
+		local target = Resolve.find(path)
+
+		if not target or target.Parent == game then
+			continue
+		end
+
+		report.removed += 1
+		table.insert(report.deletions, target:GetFullName())
+		note(report, "removed", target:GetFullName(), `{target.ClassName}, no longer in the project`)
+
+		if not report.preview then
+			pcall(function()
+				target:Destroy()
+			end)
+		end
+	end
+end
+
+function Apply.tree(root: Node, preview: boolean?, stale: { string }?): Report
 	local report = blank(preview)
+	forget(stale or {}, report)
 	Apply.walk(game, root, report)
 	return report
 end

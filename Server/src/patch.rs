@@ -141,13 +141,21 @@ fn walk(before: &Node, after: &Node, patch: &mut Patch) {
     }
 
     for child in &before.children {
-        if child.ownership != Ownership::Managed {
-            continue;
-        }
-
         if after.find_child(&child.name).is_none() {
-            patch.ops.push(Op::Remove { id: child.id.clone() });
+            vanish(child, patch);
         }
+    }
+}
+
+fn vanish(node: &Node, patch: &mut Patch) {
+    match node.ownership {
+        Ownership::Managed => patch.ops.push(Op::Remove { id: node.id.clone() }),
+        Ownership::Passthrough => {
+            for child in &node.children {
+                vanish(child, patch);
+            }
+        }
+        Ownership::Reference => {}
     }
 }
 

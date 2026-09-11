@@ -4,6 +4,7 @@ local ChangeHistoryService = game:GetService("ChangeHistoryService")
 
 local Apply = require(script.Apply)
 local Log = require(script.Parent.Log)
+local Memory = require(script.Memory)
 local Resolve = require(script.Resolve)
 
 local Reconcile = {}
@@ -43,14 +44,16 @@ local function record<T>(label: string, body: () -> T): T
 	return result
 end
 
-function Reconcile.full(root: Node): Report
+function Reconcile.full(root: Node, project: string): Report
 	return record("RoFlux sync", function()
-		return Apply.tree(root, false)
+		local report = Apply.tree(root, false, Memory.stale(project, root))
+		Memory.save(project, Memory.roots(root, {}))
+		return report
 	end)
 end
 
-function Reconcile.preview(root: Node): Report
-	return Apply.tree(root, true)
+function Reconcile.preview(root: Node, project: string): Report
+	return Apply.tree(root, true, Memory.stale(project, root))
 end
 
 local function patchOne(op: Op, report: Report, resync: { boolean })
@@ -70,7 +73,7 @@ local function patchOne(op: Op, report: Report, resync: { boolean })
 			return
 		end
 
-		Apply.node(parent, node, report)
+		Apply.place(parent, node, report)
 		return
 	end
 
@@ -127,7 +130,7 @@ local function patchOne(op: Op, report: Report, resync: { boolean })
 	Apply.settle(target, node, report, op.clearedAttributes)
 end
 
-function Reconcile.patch(ops: { Op }): (Report, boolean)
+function Reconcile.patch(ops: { Op }, project: string): (Report, boolean)
 	local report = Apply.blank()
 	local resync = { false }
 
@@ -135,6 +138,8 @@ function Reconcile.patch(ops: { Op }): (Report, boolean)
 		for _, op in ops do
 			patchOne(op, report, resync)
 		end
+
+		Memory.track(project, ops)
 	end)
 
 	return report, resync[1]

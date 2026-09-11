@@ -131,7 +131,7 @@ local function onSync(self: Session, message: any)
 	end
 
 	if not self.reviewed and Settings.get("confirmChanges") then
-		local preview = Reconcile.preview(message.tree.root)
+		local preview = Reconcile.preview(message.tree.root, self.project)
 		local total = preview.added + preview.updated + preview.removed
 		local outline = `{preview.added} to create, {preview.updated} to edit, {preview.removed} to delete.`
 
@@ -146,7 +146,7 @@ local function onSync(self: Session, message: any)
 	self.reviewed = true
 
 	local ok, report = pcall(function()
-		return Reconcile.full(message.tree.root)
+		return Reconcile.full(message.tree.root, self.project)
 	end)
 
 	if not ok then
@@ -174,7 +174,7 @@ local function onPatch(self: Session, message: any)
 	end
 
 	local ok, report, resync = pcall(function()
-		return Reconcile.patch(message.patch.ops)
+		return Reconcile.patch(message.patch.ops, self.project)
 	end)
 
 	if not ok then
