@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why RoFlux &middot; RoFlux</title>
+<link rel="icon" href="assets/RoFlux_icon_512.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav class="nav">
+	<div class="wrap nav-inner">
+		<a class="nav-logo" href="index.html"><img src="assets/RoFlux_wordmark.png" alt="RoFlux"></a>
+		<div class="nav-links">
+			<a href="getting-started.html">Get started</a>
+			<a href="project.html">Project format</a>
+			<a href="syncing.html">Syncing</a>
+			<a href="scripts.html">Scripts</a>
+			<a href="types.html">Types</a>
+			<a href="cli.html">CLI</a>
+			<a href="edge-cases.html">Edge cases</a>
+		</div>
+	</div>
+</nav>
+
+<div class="wrap docs">
+	<aside class="side">
+		<h5>Guides</h5>
+		<a href="why.html" class="active">Why RoFlux</a>
+		<a href="getting-started.html">Getting started</a>
+		<a href="project.html">Project format</a>
+		<a href="syncing.html">How syncing works</a>
+		<a href="scripts.html">Script system</a>
+		<h5>Reference</h5>
+		<a href="script-api.html">Script API</a>
+		<a href="types.html">Value types</a>
+		<a href="cli.html">CLI commands</a>
+		<a href="edge-cases.html">Edge cases</a>
+		<h5>On this page</h5>
+		<a href="#short">The short version</a>
+		<a href="#scripts">Your build runs your code</a>
+		<a href="#transpile">Any file, any language</a>
+		<a href="#more">Other things you get</a>
+		<a href="#others">When to pick something else</a>
+		<a href="#rojo">Coming from Rojo</a>
+	</aside>
+
+	<main class="content">
+		<h1>Why RoFlux</h1>
+		<p class="lede">There are a few good ways to work on a Roblox game from real files. This page helps you pick one. The short answer: choose RoFlux when you want your build to do more than copy files, like running your own code or turning other languages and formats into instances.</p>
+
+		<h2 id="short">The short version</h2>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Tool</th><th>In short</th><th>A good fit when</th></tr></thead>
+			<tbody>
+				<tr><td><a href="https://rojo.space">Rojo</a></td><td>The long standing standard. Your files are the source of truth and map onto instances in Studio.</td><td>You want the most proven tool, with the biggest community and the most tools built around it.</td></tr>
+				<tr><td><a href="https://devforum.roblox.com/t/azul-%E2%80%94-easy-powerful-studio-first-two-way-sync/4159808">Azul</a> and <a href="https://devforum.roblox.com/t/carbon-the-easier-way-to-sync-your-scripts-to-your-local-filesystem/4181010">Carbon</a></td><td>Studio first, two way sync. What you do in Studio is saved to your files and back.</td><td>You build mostly in Studio and want your scripts on disk for your editor.</td></tr>
+				<tr><td>Pesto and Verde</td><td>Editor tools that improve local work, or show a copy of the Explorer and Properties windows inside VS Code.</td><td>You want to browse and edit the game tree without leaving your editor.</td></tr>
+				<tr><td><strong>RoFlux</strong></td><td>Files are the source of truth and sync one way into Studio, with a script system that runs during every build.</td><td>You want to shape, generate or transpile what reaches Studio.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>These tools do not have to compete. The right one depends on where you like to work and how much control you want over the build.</p>
+
+		<h2 id="scripts">Your build runs your code</h2>
+		<p>Most sync tools follow a fixed set of rules: this file becomes that instance. RoFlux has those rules too, but it also runs Luau scripts from your project's <code>scripts/</code> folder during every build. They work like plugins for the sync itself.</p>
+		<p>A script can:</p>
+		<ul>
+			<li>change source on its way to Studio, like adding a version line or stripping debug code</li>
+			<li>build modules from data files, so a folder of JSON becomes one tidy ModuleScript</li>
+			<li>edit the finished tree before it syncs, to tag, add, rename or remove instances</li>
+			<li>run tools you already use, like a formatter, when you allow it</li>
+			<li>talk to your game while you playtest, saving the console to a file or sending messages in and out</li>
+		</ul>
+		<p>Each of those is a few lines. Here is a version line added to every script in the game:</p>
+<pre><code><span class="tok-c">-- scripts/version.luau</span>
+<span class="tok-k">roflux</span>.onTransfer(<span class="tok-k">function</span>(file)
+	<span class="tok-k">return</span> `-- {<span class="tok-k">roflux</span>.project().name} built {os.date(<span class="tok-s">"%Y-%m-%d"</span>)}\n` .. file.source
+<span class="tok-k">end</span>)</code></pre>
+		<p>Your scripts get a full toolkit: reading and writing project files, JSON and TOML, building instances, value helpers, a cache, and <code>require</code> for splitting them up. Your editor type checks all of it. See the <a href="scripts.html">Script system</a> and the <a href="script-api.html">Script API</a>.</p>
+
+		<h2 id="transpile">Any file, any language</h2>
+		<p>A script can claim a file extension and say what those files become. That makes RoFlux a place to plug in other languages and formats, with no extra build step and no second tool watching your files.</p>
+		<ul>
+			<li><code>.csv</code> or <code>.yaml</code> data turned into ModuleScripts</li>
+			<li>a small markup file turned into a whole UI tree</li>
+			<li>notes or dialogue turned into StringValues</li>
+			<li>a simple language compiled into Luau, like a small part of Python</li>
+		</ul>
+		<p>This turns every <code>.csv</code> file into a ModuleScript that returns its rows:</p>
+<pre><code><span class="tok-c">-- scripts/csv.luau</span>
+<span class="tok-k">roflux</span>.transpile(<span class="tok-s">"csv"</span>, <span class="tok-k">function</span>(file)
+	<span class="tok-k">local</span> rows = {}
+
+	<span class="tok-k">for</span> _, line <span class="tok-k">in</span> <span class="tok-k">roflux</span>.text.lines(file.text) <span class="tok-k">do</span>
+		table.insert(rows, <span class="tok-k">roflux</span>.text.split(line, <span class="tok-s">","</span>))
+	<span class="tok-k">end</span>
+
+	<span class="tok-k">return</span> <span class="tok-k">roflux</span>.luau.module(rows)
+<span class="tok-k">end</span>)</code></pre>
+		<p>Returning text makes a ModuleScript with that source. Return a declaration instead and one file can build any number of instances. Either way:</p>
+		<ul>
+			<li>it happens live while you work, and also in <code>roflux build</code></li>
+			<li>editing the file only updates what changed in Studio</li>
+			<li>deleting the file removes everything it made</li>
+			<li>the result is in the sourcemap, so your editor knows about it</li>
+		</ul>
+		<p>Your Luau is never touched unless you ask. RoFlux sends it to Studio exactly as written, and only a script you wrote can change it.</p>
+
+		<h2 id="more">Other things you get</h2>
+		<ul>
+			<li><strong>The plugin is built in.</strong> <code>roflux plugin</code> installs the Studio plugin from the server itself, so the two always match.</li>
+			<li><strong>A small project file.</strong> Folders say where they go with a tiny <code>init.meta.json</code>, instead of one big file describing the whole game.</li>
+			<li><strong>It only touches what you declared.</strong> It cleans up inside the trees you own and leaves the rest of the place alone. It even remembers what it made, so a folder you moved while offline is cleaned up on the next connect.</li>
+			<li><strong>A review before big changes.</strong> On connect you see everything that will be created, edited or deleted, and can say no.</li>
+			<li><strong>Types everywhere.</strong> <code>sourcemap.json</code> is rewritten on every change for luau-lsp.</li>
+			<li><strong>Real place files.</strong> <code>roflux build</code> writes <code>.rbxl</code> and <code>.rbxm</code> files for publishing or CI.</li>
+		</ul>
+
+		<h2 id="others">When to pick something else</h2>
+		<p>RoFlux is not the right tool for everyone. Pick something else when:</p>
+		<ul>
+			<li><strong>You build mostly in Studio</strong> and want changes you make there saved back to your files. RoFlux never reads anything from Studio, on purpose. A two way tool like Azul or Carbon fits that better.</li>
+			<li><strong>You want the Explorer and Properties inside your editor.</strong> Pesto and Verde are made for that.</li>
+			<li><strong>You need the most proven option.</strong> Rojo has years of use, a large community, and many tools and templates built around its project format. RoFlux is young, and its project format is different.</li>
+		</ul>
+
+		<h2 id="rojo">Coming from Rojo</h2>
+		<p>The ideas are close, so moving over is mostly renaming.</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>In Rojo</th><th>In RoFlux</th></tr></thead>
+			<tbody>
+				<tr><td>a tree of folders in <code>default.project.json</code></td><td>folders with an <code>init.meta.json</code> that says <code>"$Parent"</code></td></tr>
+				<tr><td><code>"$className"</code></td><td><code>"$ClassName"</code></td></tr>
+				<tr><td><code>"$path"</code></td><td><code>"$Path"</code></td></tr>
+				<tr><td><code>"$properties"</code></td><td>write properties straight in, or use <code>"$Properties"</code></td></tr>
+				<tr><td><code>Thing.model.json</code></td><td><code>Thing.inst.json</code></td></tr>
+				<tr><td><code>init.meta.json</code></td><td><code>init.meta.json</code>, which can also move the folder with <code>"$Parent"</code></td></tr>
+				<tr><td><code>rojo sourcemap</code></td><td>written for you on every build</td></tr>
+				<tr><td><code>rojo plugin install</code></td><td><code>roflux plugin</code></td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>One thing to know: loose files at the top of a RoFlux project are ignored. Only <code>meta.inst.json</code> and folders with an <code>init.meta.json</code> are compiled there. See the <a href="project.html#root">project root rules</a>.</p>
+
+		<div class="pager">
+			<span></span>
+			<a href="getting-started.html">Getting started &rarr;</a>
+		</div>
+	</main>
+</div>
+
+<footer>
+	<div class="wrap">
+		<div class="foot-grid">
+			<div>
+				<h6>Documentation</h6>
+				<a href="why.html">Why RoFlux</a>
+				<a href="getting-started.html">Getting started</a>
+				<a href="project.html">Project format</a>
+				<a href="syncing.html">How syncing works</a>
+			</div>
+			<div>
+				<h6>Reference</h6>
+				<a href="scripts.html">Script system</a>
+				<a href="script-api.html">Script API</a>
+				<a href="types.html">Value types</a>
+				<a href="cli.html">CLI commands</a>
+				<a href="edge-cases.html">Edge cases</a>
+			</div>
+			<div>
+				<h6>Project</h6>
+				<a href="index.html">Home</a>
+			</div>
+		</div>
+		<p class="foot-note">RoFlux syncs one way, from your editor into Roblox Studio.</p>
+	</div>
+</footer>
+
+</body>
+</html>

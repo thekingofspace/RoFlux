@@ -49,6 +49,7 @@ Full docs are at [thekingofspace.github.io/RoFlux](https://thekingofspace.github
 
 | Page | Covers |
 | --- | --- |
+| [Why RoFlux](https://thekingofspace.github.io/RoFlux/why.html) | How it compares to Rojo, Azul, Carbon, Pesto and Verde |
 | [Getting started](https://thekingofspace.github.io/RoFlux/getting-started.html) | Install, connect, editor setup |
 | [Project format](https://thekingofspace.github.io/RoFlux/project.html) | Files, directives, `meta.inst.json`, multiple places |
 | [How syncing works](https://thekingofspace.github.io/RoFlux/syncing.html) | Ownership, deletion, playtests, transport |
