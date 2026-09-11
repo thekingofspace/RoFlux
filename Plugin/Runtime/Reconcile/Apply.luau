@@ -1,5 +1,6 @@
 --!strict
 
+local Bridge = require(script.Parent.Parent.Bridge)
 local Decode = require(script.Parent.Parent.Decode)
 local Log = require(script.Parent.Parent.Log)
 local Resolve = require(script.Parent.Resolve)
@@ -253,7 +254,7 @@ local function sweep(target: Instance, node: Node, report: Report)
 	end
 
 	for _, child in target:GetChildren() do
-		if declared[child.Name] then
+		if declared[child.Name] or Bridge.is(child) then
 			continue
 		end
 

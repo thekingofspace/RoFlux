@@ -2,16 +2,28 @@
 
 local RunService = game:GetService("RunService")
 
+local Bridge = require(script.Runtime.Bridge)
+local Game = require(script.Runtime.Game)
 local Log = require(script.Runtime.Log)
 local Session = require(script.Runtime.Session)
 local Settings = require(script.Runtime.Settings)
 local UI = require(script.UI)
 
-if not RunService:IsStudio() or not RunService:IsEdit() then
+if not RunService:IsStudio() then
+	return
+end
+
+if RunService:IsRunning() then
+	Game.start(plugin)
+	return
+end
+
+if not RunService:IsEdit() then
 	return
 end
 
 Settings.bind(plugin)
+Bridge.stop()
 
 local session = Session.new()
 local toolbar = plugin:CreateToolbar("RoFlux")

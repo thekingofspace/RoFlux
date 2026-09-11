@@ -2,6 +2,7 @@
 
 local RunService = game:GetService("RunService")
 
+local Bridge = require(script.Parent.Bridge)
 local Changes = require(script.Parent.Changes)
 local Log = require(script.Parent.Log)
 local Reconcile = require(script.Parent.Reconcile)
@@ -15,6 +16,7 @@ type Fields = {
 	transport: Transport.Transport?,
 	status: string,
 	project: string,
+	session: string?,
 	detail: string,
 	deferred: boolean,
 	editing: boolean,
@@ -35,6 +37,7 @@ function Session.new(): Session
 		transport = nil,
 		status = "offline",
 		project = "",
+		session = nil,
 		detail = "not connected",
 		deferred = false,
 		editing = editing(),
@@ -208,6 +211,7 @@ local function onMessage(self: Session, message: any)
 		Session.announce(self, "connected", `protocol {message.protocol}`)
 
 		if self.transport then
+			self.session = Bridge.start(Transport.http(self.transport))
 			Transport.send(self.transport, { type = "ready", place = game.Name })
 		end
 
@@ -221,6 +225,11 @@ local function onMessage(self: Session, message: any)
 
 	if kind == "patch" then
 		onPatch(self, message)
+		return
+	end
+
+	if kind == "message" then
+		Bridge.receive(message.args)
 		return
 	end
 
@@ -257,6 +266,8 @@ function Session.connect(self: Session): boolean
 	end
 
 	transport.onClosed = function(reason)
+		Bridge.stop()
+		self.session = nil
 		Log.warn(`disconnected{if reason then `: {reason}` else ""}`)
 		Session.announce(self, "offline", reason or "the server closed the connection")
 	end
@@ -280,6 +291,9 @@ function Session.disconnect(self: Session, reason: string?)
 		Transport.close(self.transport)
 		self.transport = nil
 	end
+
+	Bridge.stop()
+	self.session = nil
 
 	self.deferred = false
 

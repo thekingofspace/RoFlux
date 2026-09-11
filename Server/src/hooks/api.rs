@@ -13,6 +13,11 @@ pub const EVENTS: &[&str] = &[
     "compile",
     "sync",
     "tree",
+    "event",
+    "gameEvent",
+    "log",
+    "gameStart",
+    "gameEnd",
 ];
 
 pub fn state(lua: &Lua) -> Result<Table> {
@@ -161,6 +166,7 @@ pub fn install(lua: &Lua, setup: &Setup) -> Result<()> {
     super::files::install(lua, &roflux, setup.root.clone())?;
     super::data::install(lua, &roflux, setup.root.clone())?;
     super::system::install(lua, &roflux, setup)?;
+    super::outbox::install(lua, &roflux)?;
 
     lua.globals().set("roflux", roflux)?;
 

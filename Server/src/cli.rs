@@ -186,6 +186,20 @@ async fn serve(project: String, port: u16, quiet: bool) -> Result<()> {
     log::good(format!("{} loaded, {}", build.config.name, build.stats()));
 
     let shared = Shared::new(build);
+
+    let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+    crate::hooks::outbox::connect(sender);
+
+    let forwarder = tokio::spawn({
+        let shared = shared.clone();
+
+        async move {
+            while let Some(outgoing) = receiver.recv().await {
+                shared.send(outgoing).await;
+            }
+        }
+    });
+
     let watcher = tokio::spawn({
         let shared = shared.clone();
         let root = root.clone();
@@ -203,6 +217,7 @@ async fn serve(project: String, port: u16, quiet: bool) -> Result<()> {
     }
 
     watcher.abort();
+    forwarder.abort();
 
     Ok(())
 }

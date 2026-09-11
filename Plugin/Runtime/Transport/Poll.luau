@@ -7,6 +7,7 @@ Poll.__index = Poll
 
 type Fields = {
 	base: string,
+	info: any,
 	cursor: number,
 	alive: boolean,
 	onMessage: ((string) -> ())?,
@@ -54,6 +55,7 @@ function Poll.connect(base: string): (Poll?, string?)
 
 	local self: Poll = setmetatable({
 		base = base,
+		info = decode(body),
 		cursor = 0,
 		alive = true,
 		onMessage = nil,
@@ -77,6 +79,18 @@ end
 
 function Poll.start(self: Poll)
 	task.spawn(function()
+		local info = self.info
+
+		if type(info) == "table" then
+			deliver(self, {
+				type = "hello",
+				protocol = info.protocol,
+				project = info.project,
+				id = info.id,
+				server = info.server,
+			})
+		end
+
 		local ok, body = request(`{self.base}/api/snapshot`)
 
 		if ok and self.alive then

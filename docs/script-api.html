@@ -38,6 +38,7 @@
 		<a href="edge-cases.html">Edge cases</a>
 		<h5>On this page</h5>
 		<a href="#events">Events</a>
+		<a href="#studio">Studio events</a>
 		<a href="#logging">Logging</a>
 		<a href="#fs">Files</a>
 		<a href="#data">Data formats</a>
@@ -76,6 +77,11 @@
 				<tr><td><code>roflux.onTree(fn)</code></td><td>the whole tree is built</td><td>the root node, change it or return a new one</td></tr>
 				<tr><td><code>roflux.onCompile(fn)</code></td><td>every build finishes</td><td>build info</td></tr>
 				<tr><td><code>roflux.onSync(fn)</code></td><td>a change is sent to Studio</td><td>sync info</td></tr>
+				<tr><td><code>roflux.onEvent(fn)</code></td><td>something fires the event in <code>ServerStorage</code></td><td>the session, then what was fired</td></tr>
+				<tr><td><code>roflux.onGameEvent(fn)</code></td><td>something fires the event in <code>ReplicatedStorage</code> during a playtest</td><td>the session, game session, side, then what was fired</td></tr>
+				<tr><td><code>roflux.onLog(fn)</code></td><td>anything is printed during a playtest</td><td>the session, game session, side, message and level</td></tr>
+				<tr><td><code>roflux.onGameStart(fn)</code></td><td>a playtest starts</td><td>the session and game session</td></tr>
+				<tr><td><code>roflux.onGameEnd(fn)</code></td><td>a playtest stops</td><td>the session and game session</td></tr>
 				<tr><td><code>roflux.onAdded(fn)</code></td><td>a file appears</td><td>the file</td></tr>
 				<tr><td><code>roflux.onRemoved(fn)</code></td><td>a file is deleted</td><td>the file</td></tr>
 				<tr><td><code>roflux.onChanged(fn)</code></td><td>a file is saved</td><td>the file</td></tr>
@@ -109,6 +115,111 @@
 		<h3>Sync info from onSync</h3>
 <pre><code>{ added = 1, updated = 0, removed = 0, summary = <span class="tok-s">"+1 ~0 -0"</span>, lines = { <span class="tok-s">"+ ReplicatedStorage/Shared/Coins [ModuleScript]"</span> }, clients = 1 }</code></pre>
 		<p>This only fires while <code>roflux serve</code> is running, and only when a build actually changed something.</p>
+
+		<h2 id="studio">Studio events</h2>
+		<p>These let your game and Studio talk to your hook scripts. Use them to copy the console into a file, run a tool from the command bar, collect stats from a playtest, or anything else you can think of. They only work while <code>roflux serve</code> is running and the plugin is connected.</p>
+
+		<h3>Sessions</h3>
+		<p>Every time the plugin connects, it starts a <strong>session</strong> with its own ID, a string like <code>"3F2504E0-4F89-11D3-9A0C-0305E82C3301"</code>. Every Studio event hands you this ID first, so you can tell connections apart. Disconnecting ends the session.</p>
+		<p>Every playtest also gets a <strong>game session</strong> ID, made fresh each time you press Play. The server and every client in that playtest share it, so you can group everything from one run together.</p>
+
+		<h3>From Studio: onEvent</h3>
+		<p>While connected, the plugin puts a <code>BindableEvent</code> named <code>RoFlux</code> in <code>ServerStorage</code>. Fire it from the command bar, another plugin or any edit time code:</p>
+<pre><code><span class="tok-c">-- in the Studio command bar</span>
+game.ServerStorage.RoFlux:Fire(<span class="tok-s">"export"</span>, workspace.Map:GetPivot(), 42)</code></pre>
+<pre><code><span class="tok-c">-- scripts/tools.luau</span>
+<span class="tok-k">roflux</span>.onEvent(<span class="tok-k">function</span>(session, action, pivot, count)
+	<span class="tok-k">if</span> action == <span class="tok-s">"export"</span> <span class="tok-k">then</span>
+		<span class="tok-k">roflux</span>.fs.write(<span class="tok-s">"out/pivot.json"</span>, <span class="tok-k">roflux</span>.json.encode(pivot, <span class="tok-k">true</span>))
+	<span class="tok-k">end</span>
+<span class="tok-k">end</span>)</code></pre>
+		<p>The event is only there in edit mode. It is never saved into the place, and it is removed as soon as the plugin disconnects.</p>
+
+		<h3>From a playtest: onGameEvent</h3>
+		<p>When you press Play while connected, the plugin puts a <code>BindableEvent</code> named <code>RoFlux</code> in <code>ReplicatedStorage</code>. Both server and client code can fire it:</p>
+<pre><code><span class="tok-c">-- any Script or LocalScript</span>
+<span class="tok-k">local</span> RoFlux = game.ReplicatedStorage:FindFirstChild(<span class="tok-s">"RoFlux"</span>)
+
+<span class="tok-k">if</span> RoFlux <span class="tok-k">then</span>
+	RoFlux:Fire(<span class="tok-s">"coinCollected"</span>, player.Name, coin.Position)
+<span class="tok-k">end</span></code></pre>
+<pre><code><span class="tok-k">roflux</span>.onGameEvent(<span class="tok-k">function</span>(session, gameSession, context, name, ...)
+	<span class="tok-k">roflux</span>.log(context, name, ...)
+<span class="tok-k">end</span>)</code></pre>
+		<p><code>context</code> is <code>"server"</code> or <code>"client"</code>, depending on which side fired it. Use <code>FindFirstChild</code> as above, so the same code runs fine when RoFlux is not connected and the event is not there. It only exists in playtests in Studio, never in a live game.</p>
+
+		<h3>Console: onLog</h3>
+		<p>During a playtest, everything printed to the output on the server and on the client is sent to <code>onLog</code>:</p>
+<pre><code><span class="tok-k">roflux</span>.onLog(<span class="tok-k">function</span>(session, gameSession, context, message, level)
+	<span class="tok-k">roflux</span>.fs.append(`logs/{gameSession}.txt`, `[{context}] [{level}] {message}\n`)
+<span class="tok-k">end</span>)</code></pre>
+		<p><code>level</code> is <code>"output"</code> for <code>print</code>, <code>"warning"</code> for <code>warn</code>, <code>"error"</code> for errors, or <code>"info"</code>. This is only for playtests. Edit mode output is not sent.</p>
+
+		<h3>Playtests: onGameStart and onGameEnd</h3>
+<pre><code><span class="tok-k">roflux</span>.onGameStart(<span class="tok-k">function</span>(session, gameSession)
+	<span class="tok-k">roflux</span>.log(<span class="tok-s">"playtest started"</span>, gameSession)
+<span class="tok-k">end</span>)
+
+<span class="tok-k">roflux</span>.onGameEnd(<span class="tok-k">function</span>(session, gameSession)
+	<span class="tok-k">roflux</span>.log(<span class="tok-s">"playtest ended"</span>, gameSession)
+<span class="tok-k">end</span>)</code></pre>
+		<p>Each playtest sends one start and one end, from the server side.</p>
+
+		<h3>Sending back: fireStudio and fireInGame</h3>
+		<p>Scripts can talk the other way too. Each <code>RoFlux</code> event has a child <code>BindableEvent</code> named <code>Received</code>, and these two functions fire it:</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Function</th><th>Fires</th></tr></thead>
+			<tbody>
+				<tr><td><code>roflux.fireStudio(...)</code></td><td><code>ServerStorage.RoFlux.Received</code>, in edit mode</td></tr>
+				<tr><td><code>roflux.fireInGame(...)</code></td><td><code>ReplicatedStorage.RoFlux.Received</code>, on the server and on every client of the running playtest</td></tr>
+			</tbody>
+		</table>
+		</div>
+<pre><code><span class="tok-c">-- scripts/greeter.luau</span>
+<span class="tok-k">roflux</span>.onGameStart(<span class="tok-k">function</span>(session, gameSession)
+	<span class="tok-k">roflux</span>.fireInGame(<span class="tok-s">"config"</span>, <span class="tok-k">roflux</span>.json(<span class="tok-s">"data/tuning.json"</span>))
+<span class="tok-k">end</span>)</code></pre>
+<pre><code><span class="tok-c">-- any Script or LocalScript</span>
+<span class="tok-k">local</span> RoFlux = game.ReplicatedStorage:FindFirstChild(<span class="tok-s">"RoFlux"</span>)
+
+<span class="tok-k">if</span> RoFlux <span class="tok-k">then</span>
+	RoFlux.Received.Event:Connect(<span class="tok-k">function</span>(name, data)
+		<span class="tok-k">print</span>(name, data)
+	<span class="tok-k">end</span>)
+<span class="tok-k">end</span></code></pre>
+		<p>Send basic things: text, numbers, booleans, and tables of those. They arrive in the same order, with any <code>nil</code> gaps kept. Functions can not be sent, and a Roblox type like a <code>Vector3</code> does not exist on this side, so send its numbers and build it in the game.</p>
+		<p>Both return <code>true</code> when the message was handed to the server. That only happens while <code>roflux serve</code> is running, so during <code>roflux compile</code> they return <code>false</code>. A message sent while nothing is listening is dropped: <code>fireStudio</code> needs the plugin connected, and <code>fireInGame</code> needs a playtest running. A playtest only gets messages sent after it started, so <code>onGameStart</code> is a good place to send the first one.</p>
+		<p>The <code>Received</code> event is separate from the event you fire to reach your scripts. That way a message coming in is never sent straight back out again.</p>
+
+		<h3>What arrives</h3>
+		<p>Whatever you fire is sent over as plain data, in the same order, with any <code>nil</code> gaps kept. Numbers, strings, booleans and tables arrive as they are. Roblox types can not exist outside Roblox, so each one arrives as a table of its values, with a <code>type</code> field saying what it was:</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Fired</th><th>Arrives as</th></tr></thead>
+			<tbody>
+				<tr><td><code>Vector3</code>, <code>Vector2</code></td><td><code>{ type = "Vector3", X, Y, Z }</code></td></tr>
+				<tr><td><code>CFrame</code></td><td><code>X</code>, <code>Y</code>, <code>Z</code>, <code>Position</code>, <code>LookVector</code>, <code>RightVector</code>, <code>UpVector</code>, <code>Orientation</code> in degrees, and all twelve <code>Components</code></td></tr>
+				<tr><td><code>Color3</code></td><td><code>R</code>, <code>G</code>, <code>B</code> from 0 to 1, and <code>Hex</code></td></tr>
+				<tr><td><code>BrickColor</code></td><td><code>Name</code>, <code>Number</code>, <code>Color</code></td></tr>
+				<tr><td><code>UDim</code>, <code>UDim2</code></td><td><code>Scale</code> and <code>Offset</code>, or <code>X</code> and <code>Y</code> holding those</td></tr>
+				<tr><td><code>Rect</code>, <code>NumberRange</code></td><td><code>Min</code> and <code>Max</code></td></tr>
+				<tr><td><code>NumberSequence</code>, <code>ColorSequence</code></td><td><code>Keypoints</code>, a list of points</td></tr>
+				<tr><td>An enum like <code>Enum.Material.Neon</code></td><td><code>EnumType</code>, <code>Name</code>, <code>Value</code></td></tr>
+				<tr><td><code>Font</code></td><td><code>Family</code>, <code>Weight</code>, <code>Style</code></td></tr>
+				<tr><td><code>DateTime</code></td><td><code>UnixTimestampMillis</code> and <code>Iso</code></td></tr>
+				<tr><td><code>Ray</code>, <code>Region3</code>, <code>TweenInfo</code>, <code>PhysicalProperties</code></td><td>their properties</td></tr>
+				<tr><td>An <code>Instance</code></td><td><code>ClassName</code>, <code>Name</code>, and <code>Path</code> from <code>GetFullName</code></td></tr>
+				<tr><td>A function, thread, or anything else</td><td><code>{ type = "function", value = "function: 0x..." }</code></td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>So a <code>CFrame</code> becomes a table you can read, like <code>pivot.Position.Y</code>, but it has no methods. A table that holds itself is cut off with <code>"&lt;cycle&gt;"</code>, and <code>NaN</code> or infinity arrive as the text <code>"nan"</code>, <code>"inf"</code> or <code>"-inf"</code>.</p>
+		<div class="note">
+			<strong>Messages are sent in small batches</strong>
+			<p>The plugin groups messages and sends them a few times a second, so a script sees them a moment later, always in the order they happened. If a playtest prints thousands of lines at once, anything past a thousand waiting messages is dropped rather than slowing the game down.</p>
+		</div>
+		<p>While connected, the plugin also keeps two attributes on <code>ServerStorage</code>, <code>RoFluxSession</code> and <code>RoFluxServer</code>. A playtest reads them to know which session it belongs to and where to send things. They are cleared when the plugin disconnects.</p>
 
 		<h2 id="logging">Logging</h2>
 		<div class="table-wrap">

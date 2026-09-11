@@ -54,6 +54,7 @@
 		<h2 id="direction">One direction</h2>
 		<p>Files are the source of truth. The server scans the project into an instance tree, writes <code>sourcemap.json</code>, and sends the tree to any connected plugin. The plugin's only job is to make the place match.</p>
 		<p>Nothing you do in Studio is read, exported, or written back to disk. If you edit a synced instance by hand, the next patch that touches it will simply put it back.</p>
+		<p>The one thing that does travel back is messages you send on purpose: events you fire, console output during a playtest, and the start and end of a playtest. They go to your hook scripts, never into the project. See <a href="script-api.html#studio">Studio events</a>.</p>
 
 		<h2 id="ownership">Ownership</h2>
 		<p>This is the part that decides whether RoFlux may delete something. Every node in the tree is one of three kinds.</p>

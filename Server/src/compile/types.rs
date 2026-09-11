@@ -59,6 +59,10 @@ export type RoFluxExec = { ok: boolean, code: number, stdout: string, stderr: st
 
 export type RoFluxProject = { name: string, id: string, root: string, manifest: string }
 
+export type RoFluxContext = "server" | "client"
+
+export type RoFluxLevel = "output" | "info" | "warning" | "error"
+
 declare roflux: {
 	on: (event: string, callback: (...any) -> ...any) -> (),
 	onRead: (callback: RoFluxListener) -> (),
@@ -69,6 +73,13 @@ declare roflux: {
 	onCompile: (callback: (info: RoFluxCompile) -> ()) -> (),
 	onSync: (callback: (info: RoFluxSync) -> ()) -> (),
 	onTree: (callback: (root: RoFluxNode) -> RoFluxNode?) -> (),
+	onEvent: (callback: (session: string, ...any) -> ()) -> (),
+	onGameEvent: (callback: (session: string, gameSession: string, context: RoFluxContext, ...any) -> ()) -> (),
+	onLog: (callback: (session: string, gameSession: string, context: RoFluxContext, message: string, level: RoFluxLevel) -> ()) -> (),
+	onGameStart: (callback: (session: string, gameSession: string) -> ()) -> (),
+	onGameEnd: (callback: (session: string, gameSession: string) -> ()) -> (),
+	fireStudio: (...any) -> boolean,
+	fireInGame: (...any) -> boolean,
 	transpile: (extension: string, callback: RoFluxListener) -> (),
 	defer: (callback: () -> ()) -> (),
 

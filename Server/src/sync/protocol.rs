@@ -29,6 +29,9 @@ pub enum Outbound {
     Pong {
         cursor: usize,
     },
+    Message {
+        args: serde_json::Value,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize)]

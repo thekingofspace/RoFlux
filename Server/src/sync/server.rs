@@ -6,7 +6,7 @@ use anyhow::Result;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
 use axum::response::IntoResponse;
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
@@ -15,7 +15,7 @@ use serde_json::json;
 use crate::log;
 
 use super::protocol::{Inbound, Outbound};
-use super::state::Shared;
+use super::state::{Channel, Shared};
 
 #[derive(Deserialize)]
 pub struct Cursor {
@@ -28,6 +28,8 @@ pub fn router(shared: Arc<Shared>) -> Router {
         .route("/api/info", get(info))
         .route("/api/snapshot", get(snapshot))
         .route("/api/poll", get(poll))
+        .route("/api/relay", post(relay))
+        .route("/api/game", get(game))
         .route("/roflux", get(upgrade))
         .with_state(shared)
 }
@@ -55,6 +57,14 @@ async fn info(State(shared): State<Arc<Shared>>) -> impl IntoResponse {
     }))
 }
 
+async fn relay(State(shared): State<Arc<Shared>>, Json(batch): Json<super::relay::Batch>) -> impl IntoResponse {
+    let hooks = shared.build.lock().await.hooks.clone();
+
+    let delivered = tokio::task::spawn_blocking(move || super::relay::deliver(&hooks, batch)).await;
+
+    Json(json!({ "ok": delivered.is_ok() }))
+}
+
 async fn snapshot(State(shared): State<Arc<Shared>>) -> impl IntoResponse {
     axum::response::Response::builder()
         .header("content-type", "application/json")
@@ -63,28 +73,38 @@ async fn snapshot(State(shared): State<Arc<Shared>>) -> impl IntoResponse {
 }
 
 async fn poll(State(shared): State<Arc<Shared>>, Query(query): Query<Cursor>) -> impl IntoResponse {
-    let cursor = query.cursor.unwrap_or(0);
-    let mut receiver = shared.outbound.subscribe();
+    wait(&shared.main, query.cursor.unwrap_or(0)).await
+}
 
-    let pending = shared.since(cursor).await;
+async fn game(State(shared): State<Arc<Shared>>, Query(query): Query<Cursor>) -> impl IntoResponse {
+    match query.cursor {
+        Some(cursor) => wait(&shared.game, cursor).await,
+        None => delivery(shared.game.cursor().await, Vec::new()),
+    }
+}
+
+async fn wait(channel: &Channel, cursor: usize) -> axum::response::Response {
+    let mut receiver = channel.subscribe();
+    let (next, pending) = channel.since(cursor).await;
 
     if !pending.is_empty() {
-        return delivery(cursor, pending);
+        return delivery(next, pending);
     }
 
     let waited = tokio::time::timeout(Duration::from_secs(25), receiver.recv()).await;
 
     if waited.is_err() {
-        return delivery(cursor, Vec::new());
+        return delivery(next, Vec::new());
     }
 
-    delivery(cursor, shared.since(cursor).await)
+    let (next, pending) = channel.since(cursor).await;
+    delivery(next, pending)
 }
 
-fn delivery(cursor: usize, messages: Vec<Arc<String>>) -> axum::response::Response {
+fn delivery(next: usize, messages: Vec<Arc<String>>) -> axum::response::Response {
     let body = format!(
         "{{\"cursor\":{},\"messages\":[{}]}}",
-        cursor + messages.len(),
+        next,
         messages
             .iter()
             .map(|value| value.as_str())
@@ -104,7 +124,7 @@ async fn upgrade(State(shared): State<Arc<Shared>>, socket: WebSocketUpgrade) ->
 
 async fn session(shared: Arc<Shared>, socket: WebSocket) {
     let (mut writer, mut reader) = socket.split();
-    let mut receiver = shared.outbound.subscribe();
+    let mut receiver = shared.main.subscribe();
 
     shared.clients.fetch_add(1, Ordering::Relaxed);
     log::sync(format!("studio connected ({} total)", shared.connected()));

@@ -2,6 +2,7 @@ pub mod api;
 pub mod data;
 pub mod files;
 pub mod modules;
+pub mod outbox;
 pub mod system;
 
 use std::collections::HashSet;
@@ -9,7 +10,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{anyhow, Result};
-use mlua::{Function, Lua, LuaSerdeExt, MultiValue, Table, Thread, ThreadStatus, Value as LuaValue};
+use mlua::{Function, Lua, LuaSerdeExt, MultiValue, SerializeOptions, Table, Thread, ThreadStatus, Value as LuaValue};
 use serde_json::Value;
 
 use crate::ir::{Node, Tree};
@@ -161,6 +162,47 @@ impl Hooks {
         }
     }
 
+    pub fn relay(&self, event: &str, values: &[Value]) {
+        let Ok(lua) = self.lua.lock() else {
+            return;
+        };
+
+        let Ok(listeners) = api::listeners(&lua, event) else {
+            return;
+        };
+
+        if listeners.raw_len() == 0 {
+            return;
+        }
+
+        let options = SerializeOptions::new()
+            .serialize_none_to_null(false)
+            .serialize_unit_to_null(false)
+            .set_array_metatable(false);
+
+        let mut arguments = Vec::with_capacity(values.len());
+
+        for value in values {
+            match lua.to_value_with(value, options) {
+                Ok(converted) => arguments.push(converted),
+                Err(error) => {
+                    log::warn(format!("{event} hook payload failed: {error}"));
+                    return;
+                }
+            }
+        }
+
+        for pair in listeners.clone().pairs::<i64, Function>() {
+            let Ok((_, callback)) = pair else {
+                continue;
+            };
+
+            if let Err(error) = call(&lua, &callback, MultiValue::from_vec(arguments.clone())) {
+                log::warn(format!("{event} hook failed: {error}"));
+            }
+        }
+    }
+
     pub fn tree(&self, tree: &mut Tree) -> Result<()> {
         let lua = self.lua.lock().map_err(|_| anyhow!("hook runtime is poisoned"))?;
         let listeners = api::listeners(&lua, "tree")?;
@@ -290,8 +332,12 @@ fn context(lua: &Lua, relative: &str) -> mlua::Result<Table> {
 }
 
 fn invoke(lua: &Lua, callback: &Function, context: &Table) -> Result<Option<LuaValue>> {
+    call(lua, callback, MultiValue::from_vec(vec![LuaValue::Table(context.clone())]))
+}
+
+fn call(lua: &Lua, callback: &Function, arguments: MultiValue) -> Result<Option<LuaValue>> {
     let thread = lua.create_thread(callback.clone())?;
-    let produced = thread.resume::<MultiValue>(context.clone())?;
+    let produced = thread.resume::<MultiValue>(arguments)?;
 
     if thread.status() == ThreadStatus::Resumable {
         api::pending(lua)?.push(thread)?;
