@@ -51,6 +51,7 @@
 		<a href="#exec">Running programs</a>
 		<a href="#cache">Cache</a>
 		<a href="#stdlib">Luau built ins</a>
+		<a href="#modules">Modules and require</a>
 		<a href="#examples">Examples</a>
 	</aside>
 
@@ -404,7 +405,44 @@
 
 		<h2 id="stdlib">Luau built ins</h2>
 		<p>Hook scripts also have Luau's own libraries: <code>string</code>, <code>table</code>, <code>math</code>, <code>utf8</code>, <code>bit32</code>, <code>buffer</code> and <code>os</code>. From <code>os</code> you get <code>os.time()</code>, <code>os.date()</code> and <code>os.clock()</code>, which is all you need for timestamps.</p>
-		<p>All scripts in <code>scripts/</code> share one Luau runtime and load in name order. <code>require</code> does not work here, but an earlier script can leave helpers in a global table for later ones to use.</p>
+		<p>All scripts in <code>scripts/</code> share one Luau runtime and load in name order. A global set in one script can be read by the others.</p>
+
+		<h2 id="modules">Modules and require</h2>
+		<p>Split a big script into pieces with <code>require</code>. Paths are relative to the script doing the requiring:</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Path</th><th>Looks in</th></tr></thead>
+			<tbody>
+				<tr><td><code>require("./util")</code></td><td>the same folder as this script</td></tr>
+				<tr><td><code>require("../util")</code></td><td>the folder above that</td></tr>
+				<tr><td><code>require("../../util")</code></td><td>and so on, one folder up for each <code>../</code></td></tr>
+			</tbody>
+		</table>
+		</div>
+<pre><code><span class="tok-c">-- scripts/lib/strings.luau</span>
+<span class="tok-k">local</span> strings = {}
+
+<span class="tok-k">function</span> strings.shout(text)
+	<span class="tok-k">return</span> string.upper(text) .. <span class="tok-s">"!"</span>
+<span class="tok-k">end</span>
+
+<span class="tok-k">return</span> strings</code></pre>
+<pre><code><span class="tok-c">-- scripts/banner.luau</span>
+<span class="tok-k">local</span> strings = require(<span class="tok-s">"./lib/strings"</span>)
+
+<span class="tok-k">roflux</span>.onTransfer(<span class="tok-k">function</span>(file)
+	<span class="tok-k">return</span> <span class="tok-s">"-- "</span> .. strings.shout(file.stem) .. <span class="tok-s">"\n"</span> .. file.source
+<span class="tok-k">end</span>)</code></pre>
+		<p>How a path is found:</p>
+		<ul>
+			<li><code>"./util"</code> finds <code>util.luau</code>, then <code>util.lua</code>, then a folder named <code>util</code> with an <code>init.luau</code> inside.</li>
+			<li>You can write the extension too, as in <code>"./util.luau"</code>.</li>
+			<li>A path must start with <code>./</code> or <code>../</code>. A bare name like <code>"util"</code> is refused, so it is always clear where a file comes from.</li>
+			<li>A path can not climb out of the project folder.</li>
+		</ul>
+		<p>Each file runs once. Every later <code>require</code> of it gets back the same value, even from a different script. Files inside <code>scripts/</code> are loaded as hook scripts too, but a file that was already required is not run a second time. So a helper module in <code>scripts/lib/</code> is safe.</p>
+		<p>Modules can live anywhere in the project, not just in <code>scripts/</code>. RoFlux remembers every file a script required, and saving any of them reloads your scripts, just like saving a file in <code>scripts/</code> does.</p>
+		<p>Two files that require each other are stopped with an error instead of looping forever. Your editor follows these paths too, so a required module's functions show up in autocomplete.</p>
 
 		<h2 id="examples">Examples</h2>
 		<h3>Generate a module from data files</h3>

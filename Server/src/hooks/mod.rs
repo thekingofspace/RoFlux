@@ -1,11 +1,12 @@
 pub mod api;
 pub mod data;
 pub mod files;
+pub mod modules;
 pub mod system;
 
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use anyhow::{anyhow, Result};
 use mlua::{Function, Lua, LuaSerdeExt, MultiValue, Table, Thread, ThreadStatus, Value as LuaValue};
@@ -39,11 +40,19 @@ pub struct Hooks {
     lua: Mutex<Lua>,
     extensions: HashSet<String>,
     scripts: usize,
+    required: modules::Required,
 }
 
 impl Hooks {
     pub fn count(&self) -> usize {
         self.scripts
+    }
+
+    pub fn depends_on(&self, relative: &str) -> bool {
+        self.required
+            .lock()
+            .map(|set| set.contains(relative))
+            .unwrap_or(false)
     }
 
     pub fn load(setup: &Setup) -> Result<Self> {
@@ -53,6 +62,7 @@ impl Hooks {
 
         let root = &setup.root;
         let folder = root.join("scripts");
+        let required: modules::Required = Arc::new(Mutex::new(HashSet::new()));
         let mut scripts = 0;
 
         if folder.is_dir() {
@@ -81,10 +91,13 @@ impl Hooks {
                     .to_string_lossy()
                     .replace('\\', "/");
 
-                let body = std::fs::read_to_string(&file)?;
-
-                run(&lua, &body, &relative).map_err(|error| anyhow!("{relative}: {error}"))?;
                 scripts += 1;
+
+                if modules::loaded(&lua, &relative)? {
+                    continue;
+                }
+
+                modules::load(&lua, root, &required, &relative).map_err(|error| anyhow!("{relative}: {error}"))?;
             }
         }
 
@@ -99,6 +112,7 @@ impl Hooks {
             lua: Mutex::new(lua),
             extensions,
             scripts,
+            required,
         })
     }
 

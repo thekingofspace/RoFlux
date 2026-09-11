@@ -67,6 +67,8 @@
 		<p>The top level of a hook script runs once and must finish. If it yields, RoFlux stops with an error. Register your callbacks and return.</p>
 		<h3>Callbacks run inside coroutines</h3>
 		<p>Every callback is run in its own coroutine, so a hook that does yield will not block the compile. If one does yield, RoFlux warns, skips its result for that pass, and keeps the coroutine alive to resume on the next rebuild.</p>
+		<h3>Sharing code between scripts</h3>
+		<p>Use <code>require("./helpers")</code> to load another file, relative to the script calling it. Each file runs only once, no matter how many scripts require it. See <a href="script-api.html#modules">Modules and require</a>.</p>
 		<div class="note warn">
 			<strong>Hook scripts run in the server's Luau, not Roblox's</strong>
 			<p>They do not have <code>game</code>, <code>workspace</code>, <code>task</code>, or any Roblox API. They also run on an older Luau than Studio does, so <code>const</code> is not available in a hook script. Use <code>local</code>. Your actual game code is untouched by this and can use anything Roblox supports.</p>

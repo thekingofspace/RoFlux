@@ -123,10 +123,18 @@ pub async fn run(shared: Arc<Shared>, root: PathBuf) -> Result<()> {
 
 async fn apply(shared: &Arc<Shared>, root: &Path, batch: &[Change]) {
     let mut build = shared.build.lock().await;
+    let prefix = root.to_string_lossy().replace('\\', "/");
+
+    let relative = |path: &str| {
+        path.strip_prefix(&prefix)
+            .unwrap_or(path)
+            .trim_start_matches('/')
+            .to_string()
+    };
 
     let touched_hooks = batch.iter().any(|change| {
         let path = change.path();
-        path.contains("/scripts/") && classify::is_luau(path)
+        (path.contains("/scripts/") && classify::is_luau(path)) || build.hooks.depends_on(&relative(path))
     });
 
     let manifest = build.manifest.clone();
@@ -166,14 +174,7 @@ async fn apply(shared: &Arc<Shared>, root: &Path, batch: &[Change]) {
     }
 
     for change in batch {
-        let relative = change
-            .path()
-            .strip_prefix(&root.to_string_lossy().replace('\\', "/"))
-            .unwrap_or(change.path())
-            .trim_start_matches('/')
-            .to_string();
-
-        build.hooks.notify(change.event(), &relative);
+        build.hooks.notify(change.event(), &relative(change.path()));
     }
 
     let patch = match build.rebuild() {
