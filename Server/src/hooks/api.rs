@@ -18,6 +18,7 @@ pub const EVENTS: &[&str] = &[
     "log",
     "gameStart",
     "gameEnd",
+    "connect",
 ];
 
 pub fn state(lua: &Lua) -> Result<Table> {

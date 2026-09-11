@@ -70,6 +70,7 @@ fn values(entry: &Relayed) -> Option<(&'static str, Vec<Value>)> {
         ),
         "gameStart" => ("gameStart", vec![session, game]),
         "gameEnd" => ("gameEnd", vec![session, game]),
+        "connect" => ("connect", vec![session]),
         _ => return None,
     };
 

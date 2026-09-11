@@ -73,6 +73,7 @@ declare roflux: {
 	onCompile: (callback: (info: RoFluxCompile) -> ()) -> (),
 	onSync: (callback: (info: RoFluxSync) -> ()) -> (),
 	onTree: (callback: (root: RoFluxNode) -> RoFluxNode?) -> (),
+	onConnect: (callback: (session: string) -> ()) -> (),
 	onEvent: (callback: (session: string, ...any) -> ()) -> (),
 	onGameEvent: (callback: (session: string, gameSession: string, context: RoFluxContext, ...any) -> ()) -> (),
 	onLog: (callback: (session: string, gameSession: string, context: RoFluxContext, message: string, level: RoFluxLevel) -> ()) -> (),

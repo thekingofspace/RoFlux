@@ -39,6 +39,7 @@
 		<h5>On this page</h5>
 		<a href="#events">Events</a>
 		<a href="#studio">Studio events</a>
+		<a href="#two-events">Two events</a>
 		<a href="#logging">Logging</a>
 		<a href="#fs">Files</a>
 		<a href="#data">Data formats</a>
@@ -77,6 +78,7 @@
 				<tr><td><code>roflux.onTree(fn)</code></td><td>the whole tree is built</td><td>the root node, change it or return a new one</td></tr>
 				<tr><td><code>roflux.onCompile(fn)</code></td><td>every build finishes</td><td>build info</td></tr>
 				<tr><td><code>roflux.onSync(fn)</code></td><td>a change is sent to Studio</td><td>sync info</td></tr>
+				<tr><td><code>roflux.onConnect(fn)</code></td><td>the plugin connects and starts a session</td><td>the session</td></tr>
 				<tr><td><code>roflux.onEvent(fn)</code></td><td>something fires the event in <code>ServerStorage</code></td><td>the session, then what was fired</td></tr>
 				<tr><td><code>roflux.onGameEvent(fn)</code></td><td>something fires the event in <code>ReplicatedStorage</code> during a playtest</td><td>the session, game session, side, then what was fired</td></tr>
 				<tr><td><code>roflux.onLog(fn)</code></td><td>anything is printed during a playtest</td><td>the session, game session, side, message and level</td></tr>
@@ -121,10 +123,32 @@
 
 		<h3>Sessions</h3>
 		<p>Every time the plugin connects, it starts a <strong>session</strong> with its own ID, a string like <code>"3F2504E0-4F89-11D3-9A0C-0305E82C3301"</code>. Every Studio event hands you this ID first, so you can tell connections apart. Disconnecting ends the session.</p>
+		<p><code>roflux.onConnect</code> runs as soon as a session starts, with its ID. Connecting again, even from the same Studio, starts a new session and runs it again.</p>
+<pre><code><span class="tok-k">roflux</span>.onConnect(<span class="tok-k">function</span>(session)
+	<span class="tok-k">roflux</span>.log(<span class="tok-s">"studio connected"</span>, session)
+	<span class="tok-k">roflux</span>.fireStudio(<span class="tok-s">"welcome"</span>, <span class="tok-k">roflux</span>.project().name)
+<span class="tok-k">end</span>)</code></pre>
+		<p>By the time it runs, the <code>RoFlux</code> events are already in <code>ServerStorage</code>, so <code>fireStudio</code> works straight away.</p>
 		<p>Every playtest also gets a <strong>game session</strong> ID, made fresh each time you press Play. The server and every client in that playtest share it, so you can group everything from one run together.</p>
 
+		<h3 id="two-events">Two events, one for each direction</h3>
+		<p>While connected, the plugin makes a <code>BindableEvent</code> named <code>RoFlux</code>, and inside it a second <code>BindableEvent</code> named <code>Received</code>. Each one only carries messages one way:</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Event</th><th>You</th><th>Your hook scripts</th></tr></thead>
+			<tbody>
+				<tr><td><code>RoFlux</code></td><td>call <code>:Fire(...)</code> on it</td><td>get it in <code>onEvent</code> or <code>onGameEvent</code></td></tr>
+				<tr><td><code>RoFlux.Received</code></td><td>connect to <code>.Event</code> on it</td><td>send to it with <code>fireStudio</code> or <code>fireInGame</code></td></tr>
+			</tbody>
+		</table>
+		</div>
+<pre><code>your code  ── RoFlux:Fire(...) ─────────►  your hook scripts
+your code  ◄── RoFlux.Received.Event ────  your hook scripts</code></pre>
+		<p>So to send something to your scripts, fire <code>RoFlux</code>. To hear from your scripts, listen to <code>RoFlux.Received</code>. RoFlux never fires <code>RoFlux</code> itself, and never listens to <code>Received</code>, so anything that reaches your scripts came from someone firing <code>RoFlux</code>, and a message can never bounce back and forth.</p>
+		<p>The pair lives in <code>ServerStorage</code> in edit mode, and in <code>ReplicatedStorage</code> during a playtest.</p>
+
 		<h3>From Studio: onEvent</h3>
-		<p>While connected, the plugin puts a <code>BindableEvent</code> named <code>RoFlux</code> in <code>ServerStorage</code>. Fire it from the command bar, another plugin or any edit time code:</p>
+		<p>While connected, the plugin puts the <code>RoFlux</code> event in <code>ServerStorage</code>. Fire it from the command bar, another plugin or any edit time code:</p>
 <pre><code><span class="tok-c">-- in the Studio command bar</span>
 game.ServerStorage.RoFlux:Fire(<span class="tok-s">"export"</span>, workspace.Map:GetPivot(), 42)</code></pre>
 <pre><code><span class="tok-c">-- scripts/tools.luau</span>
@@ -133,10 +157,15 @@ game.ServerStorage.RoFlux:Fire(<span class="tok-s">"export"</span>, workspace.Ma
 		<span class="tok-k">roflux</span>.fs.write(<span class="tok-s">"out/pivot.json"</span>, <span class="tok-k">roflux</span>.json.encode(pivot, <span class="tok-k">true</span>))
 	<span class="tok-k">end</span>
 <span class="tok-k">end</span>)</code></pre>
-		<p>The event is only there in edit mode. It is never saved into the place, and it is removed as soon as the plugin disconnects.</p>
+		<p>To get answers back in Studio, connect to <code>Received</code>, and have your scripts call <code>fireStudio</code>:</p>
+<pre><code><span class="tok-c">-- in the Studio command bar</span>
+game.ServerStorage.RoFlux.Received.Event:Connect(<span class="tok-k">function</span>(name, ...)
+	<span class="tok-k">print</span>(<span class="tok-s">"from my scripts"</span>, name, ...)
+<span class="tok-k">end</span>)</code></pre>
+		<p>Both events are only there in edit mode. They are never saved into the place, and they are removed as soon as the plugin disconnects.</p>
 
 		<h3>From a playtest: onGameEvent</h3>
-		<p>When you press Play while connected, the plugin puts a <code>BindableEvent</code> named <code>RoFlux</code> in <code>ReplicatedStorage</code>. Both server and client code can fire it:</p>
+		<p>When you press Play while connected, the plugin puts the <code>RoFlux</code> event, with its <code>Received</code> child, in <code>ReplicatedStorage</code>. Both server and client code can fire it:</p>
 <pre><code><span class="tok-c">-- any Script or LocalScript</span>
 <span class="tok-k">local</span> RoFlux = game.ReplicatedStorage:FindFirstChild(<span class="tok-s">"RoFlux"</span>)
 
@@ -147,6 +176,7 @@ game.ServerStorage.RoFlux:Fire(<span class="tok-s">"export"</span>, workspace.Ma
 	<span class="tok-k">roflux</span>.log(context, name, ...)
 <span class="tok-k">end</span>)</code></pre>
 		<p><code>context</code> is <code>"server"</code> or <code>"client"</code>, depending on which side fired it. Use <code>FindFirstChild</code> as above, so the same code runs fine when RoFlux is not connected and the event is not there. It only exists in playtests in Studio, never in a live game.</p>
+		<p>To get messages from your scripts during a playtest, listen to <code>RoFlux.Received</code>. See <a href="#sending">Sending back</a>.</p>
 
 		<h3>Console: onLog</h3>
 		<p>During a playtest, everything printed to the output on the server and on the client is sent to <code>onLog</code>:</p>
@@ -165,35 +195,8 @@ game.ServerStorage.RoFlux:Fire(<span class="tok-s">"export"</span>, workspace.Ma
 <span class="tok-k">end</span>)</code></pre>
 		<p>Each playtest sends one start and one end, from the server side.</p>
 
-		<h3>Sending back: fireStudio and fireInGame</h3>
-		<p>Scripts can talk the other way too. Each <code>RoFlux</code> event has a child <code>BindableEvent</code> named <code>Received</code>, and these two functions fire it:</p>
-		<div class="table-wrap">
-		<table>
-			<thead><tr><th>Function</th><th>Fires</th></tr></thead>
-			<tbody>
-				<tr><td><code>roflux.fireStudio(...)</code></td><td><code>ServerStorage.RoFlux.Received</code>, in edit mode</td></tr>
-				<tr><td><code>roflux.fireInGame(...)</code></td><td><code>ReplicatedStorage.RoFlux.Received</code>, on the server and on every client of the running playtest</td></tr>
-			</tbody>
-		</table>
-		</div>
-<pre><code><span class="tok-c">-- scripts/greeter.luau</span>
-<span class="tok-k">roflux</span>.onGameStart(<span class="tok-k">function</span>(session, gameSession)
-	<span class="tok-k">roflux</span>.fireInGame(<span class="tok-s">"config"</span>, <span class="tok-k">roflux</span>.json(<span class="tok-s">"data/tuning.json"</span>))
-<span class="tok-k">end</span>)</code></pre>
-<pre><code><span class="tok-c">-- any Script or LocalScript</span>
-<span class="tok-k">local</span> RoFlux = game.ReplicatedStorage:FindFirstChild(<span class="tok-s">"RoFlux"</span>)
-
-<span class="tok-k">if</span> RoFlux <span class="tok-k">then</span>
-	RoFlux.Received.Event:Connect(<span class="tok-k">function</span>(name, data)
-		<span class="tok-k">print</span>(name, data)
-	<span class="tok-k">end</span>)
-<span class="tok-k">end</span></code></pre>
-		<p>Send basic things: text, numbers, booleans, and tables of those. They arrive in the same order, with any <code>nil</code> gaps kept. Functions can not be sent, and a Roblox type like a <code>Vector3</code> does not exist on this side, so send its numbers and build it in the game.</p>
-		<p>Both return <code>true</code> when the message was handed to the server. That only happens while <code>roflux serve</code> is running, so during <code>roflux compile</code> they return <code>false</code>. A message sent while nothing is listening is dropped: <code>fireStudio</code> needs the plugin connected, and <code>fireInGame</code> needs a playtest running. A playtest only gets messages sent after it started, so <code>onGameStart</code> is a good place to send the first one.</p>
-		<p>The <code>Received</code> event is separate from the event you fire to reach your scripts. That way a message coming in is never sent straight back out again.</p>
-
-		<h3>What arrives</h3>
-		<p>Whatever you fire is sent over as plain data, in the same order, with any <code>nil</code> gaps kept. Numbers, strings, booleans and tables arrive as they are. Roblox types can not exist outside Roblox, so each one arrives as a table of its values, with a <code>type</code> field saying what it was:</p>
+		<h3 id="arrives">What your scripts get</h3>
+		<p>Whatever you fire on <code>RoFlux</code> reaches your scripts as plain data, in the same order, with any <code>nil</code> gaps kept. Numbers, strings, booleans and tables arrive as they are. Roblox types can not exist outside Roblox, so each one arrives as a table of its values, with a <code>type</code> field saying what it was:</p>
 		<div class="table-wrap">
 		<table>
 			<thead><tr><th>Fired</th><th>Arrives as</th></tr></thead>
@@ -219,6 +222,33 @@ game.ServerStorage.RoFlux:Fire(<span class="tok-s">"export"</span>, workspace.Ma
 			<strong>Messages are sent in small batches</strong>
 			<p>The plugin groups messages and sends them a few times a second, so a script sees them a moment later, always in the order they happened. If a playtest prints thousands of lines at once, anything past a thousand waiting messages is dropped rather than slowing the game down.</p>
 		</div>
+		<h3 id="sending">Sending back: fireStudio and fireInGame</h3>
+		<p>Scripts can talk the other way too. These two functions fire the <code>Received</code> event, and your code listens to it:</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Function</th><th>Listen with</th></tr></thead>
+			<tbody>
+				<tr><td><code>roflux.fireStudio(...)</code></td><td><code>ServerStorage.RoFlux.Received.Event</code>, in edit mode</td></tr>
+				<tr><td><code>roflux.fireInGame(...)</code></td><td><code>ReplicatedStorage.RoFlux.Received.Event</code>, on the server and on every client of the running playtest</td></tr>
+			</tbody>
+		</table>
+		</div>
+<pre><code><span class="tok-c">-- scripts/greeter.luau</span>
+<span class="tok-k">roflux</span>.onGameStart(<span class="tok-k">function</span>(session, gameSession)
+	<span class="tok-k">roflux</span>.fireInGame(<span class="tok-s">"config"</span>, <span class="tok-k">roflux</span>.json(<span class="tok-s">"data/tuning.json"</span>))
+<span class="tok-k">end</span>)</code></pre>
+<pre><code><span class="tok-c">-- any Script or LocalScript</span>
+<span class="tok-k">local</span> RoFlux = game.ReplicatedStorage:FindFirstChild(<span class="tok-s">"RoFlux"</span>)
+
+<span class="tok-k">if</span> RoFlux <span class="tok-k">then</span>
+	RoFlux.Received.Event:Connect(<span class="tok-k">function</span>(name, data)
+		<span class="tok-k">print</span>(name, data)
+	<span class="tok-k">end</span>)
+<span class="tok-k">end</span></code></pre>
+		<p>Send basic things: text, numbers, booleans, and tables of those. They arrive in the same order, with any <code>nil</code> gaps kept. Functions can not be sent, and a Roblox type like a <code>Vector3</code> does not exist on this side, so send its numbers and build it in the game.</p>
+		<p>Both return <code>true</code> when the message was handed to the server. That only happens while <code>roflux serve</code> is running, so during <code>roflux compile</code> they return <code>false</code>. A message sent while nothing is listening is dropped: <code>fireStudio</code> needs the plugin connected, and <code>fireInGame</code> needs a playtest running. A playtest only gets messages sent after it started, so <code>onGameStart</code> is a good place to send the first one.</p>
+		<p>Firing <code>Received</code> yourself only reaches your own listeners. It is never sent to your scripts, since only <code>RoFlux</code> goes that way.</p>
+
 		<p>While connected, the plugin also keeps two attributes on <code>ServerStorage</code>, <code>RoFluxSession</code> and <code>RoFluxServer</code>. A playtest reads them to know which session it belongs to and where to send things. They are cleared when the plugin disconnects.</p>
 
 		<h2 id="logging">Logging</h2>

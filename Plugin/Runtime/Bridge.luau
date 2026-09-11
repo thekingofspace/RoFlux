@@ -103,6 +103,8 @@ function Bridge.start(url: string): string
 	ServerStorage:SetAttribute(Bridge.SessionKey, id)
 	ServerStorage:SetAttribute(Bridge.ServerKey, url)
 
+	Relay.push({ kind = "connect", session = id })
+
 	return id
 end
 
