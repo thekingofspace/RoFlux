@@ -45,18 +45,18 @@ across as text and never parsed or rewritten.
 
 ## Documentation
 
-Full docs are in [`docs/`](docs/), servable with GitHub Pages.
+Full docs are at [thekingofspace.github.io/RoFlux](https://thekingofspace.github.io/RoFlux/).
 
 | Page | Covers |
 | --- | --- |
-| [Getting started](docs/getting-started.html) | Install, connect, editor setup |
-| [Project format](docs/project.html) | Files, directives, `meta.inst.json`, multiple places |
-| [How syncing works](docs/syncing.html) | Ownership, deletion, playtests, transport |
-| [Script system](docs/scripts.html) | Hooks, transpilers, reading files |
-| [Script API](docs/script-api.html) | Every `roflux` function a script can use |
-| [Value types](docs/types.html) | How to write Color3, enums, UDim2 and every other type |
-| [CLI commands](docs/cli.html) | Every command and option |
-| [Edge cases](docs/edge-cases.html) | The things that surprise people |
+| [Getting started](https://thekingofspace.github.io/RoFlux/getting-started.html) | Install, connect, editor setup |
+| [Project format](https://thekingofspace.github.io/RoFlux/project.html) | Files, directives, `meta.inst.json`, multiple places |
+| [How syncing works](https://thekingofspace.github.io/RoFlux/syncing.html) | Ownership, deletion, playtests, transport |
+| [Script system](https://thekingofspace.github.io/RoFlux/scripts.html) | Hooks, transpilers, reading files |
+| [Script API](https://thekingofspace.github.io/RoFlux/script-api.html) | Every `roflux` function a script can use |
+| [Value types](https://thekingofspace.github.io/RoFlux/types.html) | How to write Color3, enums, UDim2 and every other type |
+| [CLI commands](https://thekingofspace.github.io/RoFlux/cli.html) | Every command and option |
+| [Edge cases](https://thekingofspace.github.io/RoFlux/edge-cases.html) | The things that surprise people |
 
 ## Building releases
 
