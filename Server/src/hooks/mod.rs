@@ -1,17 +1,39 @@
 pub mod api;
+pub mod data;
 pub mod files;
+pub mod system;
 
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use anyhow::{anyhow, Result};
 use mlua::{Function, Lua, LuaSerdeExt, MultiValue, Table, Thread, ThreadStatus, Value as LuaValue};
 use serde_json::Value;
 
-use crate::ir::Node;
+use crate::ir::{Node, Tree};
 use crate::log;
 use crate::project::{meta, Loaded, Transform};
+
+const PRELUDE: &str = include_str!("prelude.luau");
+
+#[derive(Clone, Debug, Default)]
+pub struct Setup {
+    pub root: PathBuf,
+    pub name: String,
+    pub id: String,
+    pub manifest: String,
+    pub scripts: Value,
+}
+
+impl Setup {
+    pub fn allow_exec(&self) -> bool {
+        self.scripts
+            .get("AllowExec")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    }
+}
 
 pub struct Hooks {
     lua: Mutex<Lua>,
@@ -24,10 +46,12 @@ impl Hooks {
         self.scripts
     }
 
-    pub fn load(root: &Path) -> Result<Self> {
+    pub fn load(setup: &Setup) -> Result<Self> {
         let lua = Lua::new();
-        api::install(&lua, root.to_path_buf())?;
+        api::install(&lua, setup)?;
+        run(&lua, PRELUDE, "roflux.prelude").map_err(|error| anyhow!("prelude: {error}"))?;
 
+        let root = &setup.root;
         let folder = root.join("scripts");
         let mut scripts = 0;
 
@@ -96,6 +120,67 @@ impl Hooks {
         }
     }
 
+    pub fn emit(&self, event: &str, payload: &Value) {
+        let Ok(lua) = self.lua.lock() else {
+            return;
+        };
+
+        let waiting = api::listeners(&lua, event)
+            .map(|list| list.raw_len() > 0)
+            .unwrap_or(false);
+
+        if !waiting {
+            return;
+        }
+
+        let context = match lua.to_value(payload) {
+            Ok(LuaValue::Table(table)) => table,
+            Ok(_) => return,
+            Err(error) => {
+                log::warn(format!("{event} hook payload failed: {error}"));
+                return;
+            }
+        };
+
+        if let Err(error) = broadcast(&lua, event, context) {
+            log::warn(format!("{event} hook failed: {error}"));
+        }
+    }
+
+    pub fn tree(&self, tree: &mut Tree) -> Result<()> {
+        let lua = self.lua.lock().map_err(|_| anyhow!("hook runtime is poisoned"))?;
+        let listeners = api::listeners(&lua, "tree")?;
+
+        if listeners.raw_len() == 0 {
+            return Ok(());
+        }
+
+        let LuaValue::Table(mut root) = lua.to_value(&tree.root)? else {
+            return Err(anyhow!("the tree could not be handed to onTree"));
+        };
+
+        fill(&lua, &root)?;
+
+        for pair in listeners.clone().pairs::<i64, Function>() {
+            let (_, callback) = pair?;
+
+            if let Some(LuaValue::Table(replaced)) = invoke(&lua, &callback, &root)? {
+                fill(&lua, &replaced)?;
+                root = replaced;
+            }
+        }
+
+        let mut rebuilt: Node = lua
+            .from_value(LuaValue::Table(root))
+            .map_err(|error| anyhow!("onTree left a node RoFlux cannot read: {error}"))?;
+
+        rebuilt.sort();
+        crate::ir::reindex_root(&mut rebuilt);
+        tree.root = rebuilt;
+
+        Ok(())
+    }
+
     pub fn drain(&self) {
         let Ok(lua) = self.lua.lock() else {
             return;
@@ -136,6 +221,30 @@ impl Hooks {
     }
 }
 
+pub(crate) fn fill(lua: &Lua, node: &Table) -> mlua::Result<()> {
+    for key in ["properties", "attributes", "tags", "children", "filePaths"] {
+        if node.get::<LuaValue>(key)?.is_nil() {
+            node.set(key, lua.create_table()?)?;
+        }
+    }
+
+    if node.get::<LuaValue>("id")?.is_nil() {
+        node.set("id", "")?;
+    }
+
+    if node.get::<LuaValue>("ownership")?.is_nil() {
+        node.set("ownership", "managed")?;
+    }
+
+    let children: Table = node.get("children")?;
+
+    for child in children.sequence_values::<Table>() {
+        fill(lua, &child?)?;
+    }
+
+    Ok(())
+}
+
 fn run(lua: &Lua, body: &str, name: &str) -> Result<()> {
     let chunk = lua.load(body).set_name(name).into_function()?;
     let thread = lua.create_thread(chunk)?;
@@ -150,9 +259,15 @@ fn run(lua: &Lua, body: &str, name: &str) -> Result<()> {
 }
 
 fn context(lua: &Lua, relative: &str) -> mlua::Result<Table> {
+    let name = relative.rsplit('/').next().unwrap_or(relative);
+    let folder = relative.rsplit_once('/').map(|(head, _)| head).unwrap_or("");
+    let stem = name.split('.').next().unwrap_or(name);
+
     let context = lua.create_table()?;
     context.set("path", relative)?;
-    context.set("name", relative.rsplit('/').next().unwrap_or(relative))?;
+    context.set("name", name)?;
+    context.set("stem", stem)?;
+    context.set("folder", folder)?;
     context.set(
         "extension",
         relative.rsplit_once('.').map(|(_, tail)| tail.to_ascii_lowercase()).unwrap_or_default(),

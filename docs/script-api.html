@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Script API &middot; RoFlux</title>
+<link rel="icon" href="assets/RoFlux_icon_512.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav class="nav">
+	<div class="wrap nav-inner">
+		<a class="nav-logo" href="index.html"><img src="assets/RoFlux_wordmark.png" alt="RoFlux"></a>
+		<div class="nav-links">
+			<a href="getting-started.html">Get started</a>
+			<a href="project.html">Project format</a>
+			<a href="syncing.html">Syncing</a>
+			<a href="scripts.html" class="active">Scripts</a>
+			<a href="types.html">Types</a>
+			<a href="cli.html">CLI</a>
+			<a href="edge-cases.html">Edge cases</a>
+		</div>
+	</div>
+</nav>
+
+<div class="wrap docs">
+	<aside class="side">
+		<h5>Guides</h5>
+		<a href="getting-started.html">Getting started</a>
+		<a href="project.html">Project format</a>
+		<a href="syncing.html">How syncing works</a>
+		<a href="scripts.html">Script system</a>
+		<h5>Reference</h5>
+		<a href="script-api.html" class="active">Script API</a>
+		<a href="types.html">Value types</a>
+		<a href="cli.html">CLI commands</a>
+		<a href="edge-cases.html">Edge cases</a>
+		<h5>On this page</h5>
+		<a href="#events">Events</a>
+		<a href="#logging">Logging</a>
+		<a href="#fs">Files</a>
+		<a href="#data">Data formats</a>
+		<a href="#luau">Writing Luau</a>
+		<a href="#new">Building instances</a>
+		<a href="#types">Value helpers</a>
+		<a href="#text">Text</a>
+		<a href="#path">Paths</a>
+		<a href="#tree">The tree</a>
+		<a href="#project">Project and settings</a>
+		<a href="#exec">Running programs</a>
+		<a href="#cache">Cache</a>
+		<a href="#stdlib">Luau built ins</a>
+		<a href="#examples">Examples</a>
+	</aside>
+
+	<main class="content">
+		<h1>Script API</h1>
+		<p class="lede">Everything a hook script can reach through the <code>roflux</code> global. Together these let a script act like a plugin: read and write files, generate code, build instances, and change the finished tree before it reaches Studio.</p>
+		<p>New to hook scripts? Start with <a href="scripts.html">the script system</a>, which covers what they are and the loading rules. This page is the full reference.</p>
+		<div class="note">
+			<strong>Your editor knows all of this</strong>
+			<p>Every function here is typed in the <code>types.d.luau</code> file RoFlux writes into your project, so you get autocomplete and type checking inside <code>scripts/</code>.</p>
+		</div>
+
+		<h2 id="events">Events</h2>
+		<p>Register a callback once, at the top level of a script. It is then called at the right moment during every build.</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Function</th><th>Called when</th><th>Gets</th></tr></thead>
+			<tbody>
+				<tr><td><code>roflux.onRead(fn)</code></td><td>a source file has been read</td><td>the file, return text to replace it</td></tr>
+				<tr><td><code>roflux.onTransfer(fn)</code></td><td>just before source goes to Studio</td><td>the file, return text to replace it</td></tr>
+				<tr><td><code>roflux.transpile(ext, fn)</code></td><td>a file with that extension is found</td><td>the file, return what it becomes</td></tr>
+				<tr><td><code>roflux.onTree(fn)</code></td><td>the whole tree is built</td><td>the root node, change it or return a new one</td></tr>
+				<tr><td><code>roflux.onCompile(fn)</code></td><td>every build finishes</td><td>build info</td></tr>
+				<tr><td><code>roflux.onSync(fn)</code></td><td>a change is sent to Studio</td><td>sync info</td></tr>
+				<tr><td><code>roflux.onAdded(fn)</code></td><td>a file appears</td><td>the file</td></tr>
+				<tr><td><code>roflux.onRemoved(fn)</code></td><td>a file is deleted</td><td>the file</td></tr>
+				<tr><td><code>roflux.onChanged(fn)</code></td><td>a file is saved</td><td>the file</td></tr>
+				<tr><td><code>roflux.on(name, fn)</code></td><td>any of the above, by name</td><td></td></tr>
+				<tr><td><code>roflux.defer(fn)</code></td><td>the next build</td><td>nothing</td></tr>
+			</tbody>
+		</table>
+		</div>
+
+		<h3>The file table</h3>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Field</th><th>Example for <code>src/Hud.client.luau</code></th></tr></thead>
+			<tbody>
+				<tr><td><code>path</code></td><td><code>"src/Hud.client.luau"</code></td></tr>
+				<tr><td><code>name</code></td><td><code>"Hud.client.luau"</code></td></tr>
+				<tr><td><code>stem</code></td><td><code>"Hud"</code></td></tr>
+				<tr><td><code>folder</code></td><td><code>"src"</code></td></tr>
+				<tr><td><code>extension</code></td><td><code>"luau"</code></td></tr>
+				<tr><td><code>source</code></td><td>the current source, on source hooks and transpilers</td></tr>
+				<tr><td><code>text</code></td><td>the raw file contents, on transpilers</td></tr>
+				<tr><td><code>className</code></td><td><code>"LocalScript"</code>, on source hooks</td></tr>
+			</tbody>
+		</table>
+		</div>
+
+		<h3>Build info from onCompile</h3>
+<pre><code>{ initial = <span class="tok-k">false</span>, instances = 42, scripts = 17, files = 30, added = 1, updated = 2, removed = 0 }</code></pre>
+		<p><code>initial</code> is true for the first build after the server starts or <code>roflux compile</code> runs. The counts say what changed since the last build.</p>
+
+		<h3>Sync info from onSync</h3>
+<pre><code>{ added = 1, updated = 0, removed = 0, summary = <span class="tok-s">"+1 ~0 -0"</span>, lines = { <span class="tok-s">"+ ReplicatedStorage/Shared/Coins [ModuleScript]"</span> }, clients = 1 }</code></pre>
+		<p>This only fires while <code>roflux serve</code> is running, and only when a build actually changed something.</p>
+
+		<h2 id="logging">Logging</h2>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Function</th><th>What it does</th></tr></thead>
+			<tbody>
+				<tr><td><code>roflux.log(...)</code></td><td>Prints to the server output, tagged <code>hook</code>.</td></tr>
+				<tr><td><code>roflux.warn(...)</code></td><td>Prints as a warning.</td></tr>
+				<tr><td><code>roflux.error(...)</code></td><td>Prints as an error. It does not stop the build.</td></tr>
+				<tr><td><code>roflux.inspect(value)</code></td><td>Turns any value into readable text, with tables laid out and keys sorted.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>Tables passed to <code>log</code>, <code>warn</code> and <code>error</code> are printed through <code>inspect</code> for you, so <code>roflux.log(someTable)</code> shows the contents instead of an address. To actually stop a build, call Luau's own <code>error()</code>.</p>
+
+		<h2 id="fs">Files</h2>
+		<p>All paths are relative to the project folder. Absolute paths and <code>..</code> are refused, so a script can never touch anything outside the project.</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Function</th><th>Returns</th></tr></thead>
+			<tbody>
+				<tr><td><code>roflux.fs.read(path)</code></td><td>The contents, or <code>nil</code> if the file is missing. Works for binary files too.</td></tr>
+				<tr><td><code>roflux.fs.write(path, text)</code></td><td><code>true</code> if it wrote, <code>false</code> if the file already held exactly that. Makes any missing folders.</td></tr>
+				<tr><td><code>roflux.fs.append(path, text)</code></td><td>Nothing. Adds to the end of a file, creating it if needed.</td></tr>
+				<tr><td><code>roflux.fs.remove(path)</code></td><td><code>true</code> if something was removed. Works on files and empty folders.</td></tr>
+				<tr><td><code>roflux.fs.mkdir(path)</code></td><td>Nothing. Makes the folder and any parents.</td></tr>
+				<tr><td><code>roflux.fs.exists(path)</code></td><td>Whether anything is there.</td></tr>
+				<tr><td><code>roflux.fs.isFile(path)</code></td><td>Whether it is a file.</td></tr>
+				<tr><td><code>roflux.fs.isDirectory(path)</code></td><td>Whether it is a folder.</td></tr>
+				<tr><td><code>roflux.fs.list(path)</code></td><td>Names directly inside a folder, sorted.</td></tr>
+				<tr><td><code>roflux.fs.walk(path)</code></td><td>Every file below a folder, as project paths.</td></tr>
+				<tr><td><code>roflux.fs.glob(pattern)</code></td><td>Every project file matching a pattern like <code>"data/**/*.json"</code>.</td></tr>
+				<tr><td><code>roflux.fs.stat(path)</code></td><td><code>{ size, modified, isFile, isDirectory }</code>, or <code>nil</code>.</td></tr>
+				<tr><td><code>roflux.fs.root()</code></td><td>The full path of the project folder.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>In a glob, <code>*</code> matches within one folder and <code>**</code> matches any number of folders. <code>walk</code> and <code>glob</code> skip hidden folders, <code>target</code> and <code>node_modules</code>.</p>
+		<div class="note warn">
+			<strong>Writing files can cause another build</strong>
+			<p>A file written inside the project is seen by the watcher, which starts a build, which runs your script again. <code>write</code> skips files whose content would not change, so this settles on its own. It only loops forever if you write something different every time, like the current time.</p>
+		</div>
+		<p><code>remove</code> will never delete the project folder itself, and it will not delete a folder that still has files in it. The older names <code>roflux.read</code>, <code>roflux.exists</code>, <code>roflux.isDirectory</code>, <code>roflux.list</code>, <code>roflux.walk</code> and <code>roflux.root</code> still work and point at the same functions.</p>
+
+		<h2 id="data">Data formats</h2>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Function</th><th>What it does</th></tr></thead>
+			<tbody>
+				<tr><td><code>roflux.json(path)</code></td><td>Reads and decodes a JSON file. Same as <code>roflux.json.read</code>.</td></tr>
+				<tr><td><code>roflux.json.decode(text)</code></td><td>Text to a table.</td></tr>
+				<tr><td><code>roflux.json.encode(value, pretty?)</code></td><td>A table to text, on one line or laid out.</td></tr>
+				<tr><td><code>roflux.toml.read(path)</code></td><td>Reads and decodes a TOML file.</td></tr>
+				<tr><td><code>roflux.toml.decode(text)</code></td><td>Text to a table.</td></tr>
+				<tr><td><code>roflux.toml.encode(value)</code></td><td>A table to text.</td></tr>
+				<tr><td><code>roflux.base64.encode(text)</code></td><td>Encodes text or binary.</td></tr>
+				<tr><td><code>roflux.base64.decode(text)</code></td><td>Decodes back to the original.</td></tr>
+				<tr><td><code>roflux.hash(text)</code></td><td>A SHA-256 hash, as 64 hex characters.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>Encoders sort object keys, so the same data always produces the same text. That matters when the output becomes a script, because text that shuffles every build would look like a change every build.</p>
+
+		<h2 id="luau">Writing Luau</h2>
+		<p>These turn data into Luau source, which is the heart of most generators.</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Function</th><th>Example</th></tr></thead>
+			<tbody>
+				<tr><td><code>roflux.luau.literal(value)</code></td><td>Any value as Luau source, so a table becomes a table you can paste into code</td></tr>
+				<tr><td><code>roflux.luau.module(value)</code></td><td>The same, with <code>return</code> in front, ready to be a ModuleScript</td></tr>
+				<tr><td><code>roflux.luau.quote(text)</code></td><td><code>say "hi"</code> becomes <code>"say \"hi\""</code></td></tr>
+				<tr><td><code>roflux.luau.isIdentifier(name)</code></td><td>Whether a name can be written without quotes</td></tr>
+			</tbody>
+		</table>
+		</div>
+<pre><code><span class="tok-k">local</span> levels = {}
+
+<span class="tok-k">for</span> _, file <span class="tok-k">in</span> <span class="tok-k">roflux</span>.fs.glob(<span class="tok-s">"data/levels/*.json"</span>) <span class="tok-k">do</span>
+	levels[<span class="tok-k">roflux</span>.path.stem(file)] = <span class="tok-k">roflux</span>.json(file)
+<span class="tok-k">end</span>
+
+<span class="tok-k">local</span> source = <span class="tok-k">roflux</span>.luau.module(levels)</code></pre>
+
+		<h2 id="new">Building instances</h2>
+		<p><code>roflux.new</code> builds a declaration without writing <code>["$ClassName"]</code> by hand. It works like <code>Instance.new</code> with the properties filled in.</p>
+<pre><code><span class="tok-k">roflux</span>.new(<span class="tok-s">"Frame"</span>, {
+	Name = <span class="tok-s">"Card"</span>,
+	Size = <span class="tok-k">roflux</span>.types.fromScale(0.3, 0.2),
+	BackgroundColor3 = <span class="tok-k">roflux</span>.types.hex(<span class="tok-s">"#12141A"</span>),
+
+	<span class="tok-k">roflux</span>.new(<span class="tok-s">"TextLabel"</span>, {
+		Name = <span class="tok-s">"Title"</span>,
+		Text = <span class="tok-s">"Play"</span>,
+		FontFace = <span class="tok-k">roflux</span>.types.font(<span class="tok-s">"GothamSSm"</span>, <span class="tok-s">"Bold"</span>),
+	}),
+})</code></pre>
+		<p>It sorts each field out for you:</p>
+		<ul>
+			<li><code>Name</code> becomes the instance name.</li>
+			<li>Numbers, text, booleans and arrays are properties.</li>
+			<li>Other declarations, including other <code>roflux.new</code> calls, are children.</li>
+			<li>Any other table, like the <code>FontFace</code> above, is moved into <code>$Properties</code> so it is set as a property instead of turning into a child by mistake.</li>
+			<li>Keys starting with <code>$</code> are kept as they are.</li>
+		</ul>
+		<p>Children can be listed by position, as above, as long as each one has a <code>Name</code>. You can also pass them as a third argument, either as a list or as a table keyed by name.</p>
+		<p>Return the result from a transpiler, or turn it into a tree node with <code>roflux.tree.node</code>.</p>
+
+		<h2 id="types">Value helpers</h2>
+		<p>Small functions that produce the value shapes described on the <a href="types.html">Value types</a> page. Everything they return is an array, so it works when syncing and in place files.</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Function</th><th>Gives</th></tr></thead>
+			<tbody>
+				<tr><td><code>roflux.types.hex("#3C91F5")</code></td><td>a Color3</td></tr>
+				<tr><td><code>roflux.types.rgb(60, 145, 245)</code></td><td>a Color3 from 0 to 255 numbers</td></tr>
+				<tr><td><code>roflux.types.color(0.2, 0.5, 1)</code></td><td>a Color3 from 0 to 1 numbers</td></tr>
+				<tr><td><code>roflux.types.hsv(0.6, 0.8, 1)</code></td><td>a Color3 from hue, saturation and value</td></tr>
+				<tr><td><code>roflux.types.vector3(x, y, z)</code></td><td>a Vector3</td></tr>
+				<tr><td><code>roflux.types.vector2(x, y)</code></td><td>a Vector2</td></tr>
+				<tr><td><code>roflux.types.udim(scale, offset)</code></td><td>a UDim</td></tr>
+				<tr><td><code>roflux.types.udim2(xs, xo, ys, yo)</code></td><td>a UDim2</td></tr>
+				<tr><td><code>roflux.types.fromScale(x, y)</code></td><td>a UDim2, like <code>UDim2.fromScale</code></td></tr>
+				<tr><td><code>roflux.types.fromOffset(x, y)</code></td><td>a UDim2, like <code>UDim2.fromOffset</code></td></tr>
+				<tr><td><code>roflux.types.cframe(x, y, z)</code></td><td>a CFrame, or pass all twelve numbers</td></tr>
+				<tr><td><code>roflux.types.rect(minX, minY, maxX, maxY)</code></td><td>a Rect</td></tr>
+				<tr><td><code>roflux.types.range(min, max)</code></td><td>a NumberRange</td></tr>
+				<tr><td><code>roflux.types.numberSequence(...)</code></td><td>a number, or a list of points</td></tr>
+				<tr><td><code>roflux.types.colorSequence(a, b)</code></td><td>a fade from one color to another</td></tr>
+				<tr><td><code>roflux.types.font("GothamSSm", "Bold")</code></td><td>a FontFace, with the family path filled in</td></tr>
+				<tr><td><code>roflux.types.typed(name, value)</code></td><td>the explicit <code>$Type</code> form</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<div class="note">
+			<strong>Colors come back as 0 to 1</strong>
+			<p><code>hex</code>, <code>rgb</code> and <code>hsv</code> all return numbers between 0 and 1. That way a very dark color like <code>#010101</code> can never be mistaken for white, which would happen if it came back as <code>[1, 1, 1]</code>.</p>
+		</div>
+
+		<h2 id="text">Text</h2>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Function</th><th>Example</th></tr></thead>
+			<tbody>
+				<tr><td><code>roflux.text.trim(s)</code></td><td><code>"  hi  "</code> becomes <code>"hi"</code></td></tr>
+				<tr><td><code>roflux.text.trimStart(s)</code>, <code>trimEnd(s)</code></td><td>trim one side only</td></tr>
+				<tr><td><code>roflux.text.startsWith(s, prefix)</code></td><td><code>true</code> or <code>false</code></td></tr>
+				<tr><td><code>roflux.text.endsWith(s, suffix)</code></td><td><code>true</code> or <code>false</code></td></tr>
+				<tr><td><code>roflux.text.replace(s, find, with)</code></td><td>plain text, so <code>"."</code> means a dot</td></tr>
+				<tr><td><code>roflux.text.split(s, separator)</code></td><td>a list, split on commas by default</td></tr>
+				<tr><td><code>roflux.text.lines(s)</code></td><td>a list of lines, handling Windows line endings</td></tr>
+				<tr><td><code>roflux.text.indent(s, prefix)</code></td><td>every line indented, with a tab by default</td></tr>
+				<tr><td><code>roflux.text.words(s)</code></td><td><code>"fooBar_baz"</code> becomes <code>{ "foo", "Bar", "baz" }</code></td></tr>
+				<tr><td><code>roflux.text.pascal(s)</code></td><td><code>"HelloWorld"</code></td></tr>
+				<tr><td><code>roflux.text.camel(s)</code></td><td><code>"helloWorld"</code></td></tr>
+				<tr><td><code>roflux.text.snake(s)</code></td><td><code>"hello_world"</code></td></tr>
+				<tr><td><code>roflux.text.kebab(s)</code></td><td><code>"hello-world"</code></td></tr>
+				<tr><td><code>roflux.text.title(s)</code></td><td><code>"Hello World"</code></td></tr>
+				<tr><td><code>roflux.text.padStart(s, width, fill)</code></td><td><code>("7", 3, "0")</code> becomes <code>"007"</code></td></tr>
+				<tr><td><code>roflux.text.padEnd(s, width, fill)</code></td><td>the same, on the other side</td></tr>
+			</tbody>
+		</table>
+		</div>
+
+		<h2 id="path">Paths</h2>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Function</th><th>Example</th></tr></thead>
+			<tbody>
+				<tr><td><code>roflux.path.join(...)</code></td><td><code>("a", "b/../c", "d.txt")</code> becomes <code>"a/c/d.txt"</code></td></tr>
+				<tr><td><code>roflux.path.normalize(p)</code></td><td>tidies slashes, <code>.</code> and <code>..</code></td></tr>
+				<tr><td><code>roflux.path.dirname(p)</code></td><td><code>"a/b/c.txt"</code> becomes <code>"a/b"</code></td></tr>
+				<tr><td><code>roflux.path.basename(p)</code></td><td><code>"a/b/c.txt"</code> becomes <code>"c.txt"</code></td></tr>
+				<tr><td><code>roflux.path.stem(p)</code></td><td><code>"a/Hud.client.luau"</code> becomes <code>"Hud.client"</code></td></tr>
+				<tr><td><code>roflux.path.extension(p)</code></td><td><code>"a/B.LUAU"</code> becomes <code>"luau"</code></td></tr>
+				<tr><td><code>roflux.path.withExtension(p, ext)</code></td><td><code>("a/b.txt", "md")</code> becomes <code>"a/b.md"</code></td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p><code>path.stem</code> only removes the last extension. The <code>stem</code> on a file table removes all of them, so it gives <code>"Hud"</code>.</p>
+
+		<h2 id="tree">The tree</h2>
+		<p><code>roflux.onTree</code> hands you the finished tree just before RoFlux writes the sourcemap and syncs to Studio. Anything you change is exactly what Studio receives. This is how a script can tag instances, inject generated ones, rename things, or remove what it does not want.</p>
+<pre><code><span class="tok-k">roflux</span>.onTree(<span class="tok-k">function</span>(root)
+	<span class="tok-k">roflux</span>.tree.each(root, <span class="tok-k">function</span>(node, path)
+		<span class="tok-k">if</span> node.className == <span class="tok-s">"ModuleScript"</span> <span class="tok-k">then</span>
+			table.insert(node.tags, <span class="tok-s">"Module"</span>)
+		<span class="tok-k">end</span>
+	<span class="tok-k">end</span>)
+
+	<span class="tok-k">local</span> generated = <span class="tok-k">roflux</span>.tree.ensure(root, <span class="tok-s">"ReplicatedStorage/Generated"</span>)
+	<span class="tok-k">roflux</span>.tree.add(generated, <span class="tok-k">roflux</span>.tree.node(<span class="tok-s">"Built"</span>, <span class="tok-k">roflux</span>.new(<span class="tok-s">"StringValue"</span>, { Value = <span class="tok-k">roflux</span>.version() })))
+<span class="tok-k">end</span>)</code></pre>
+		<h3>A node</h3>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Field</th><th>Holds</th></tr></thead>
+			<tbody>
+				<tr><td><code>name</code></td><td>the instance name</td></tr>
+				<tr><td><code>className</code></td><td>the class</td></tr>
+				<tr><td><code>properties</code></td><td>a table of properties, in the same JSON shapes as project files</td></tr>
+				<tr><td><code>attributes</code></td><td>a table of attributes</td></tr>
+				<tr><td><code>tags</code></td><td>a list of tags</td></tr>
+				<tr><td><code>children</code></td><td>a list of child nodes</td></tr>
+				<tr><td><code>ownership</code></td><td><code>"managed"</code>, <code>"passthrough"</code> or <code>"reference"</code></td></tr>
+				<tr><td><code>filePaths</code></td><td>the files this node came from</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<h3>Helpers</h3>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Function</th><th>What it does</th></tr></thead>
+			<tbody>
+				<tr><td><code>roflux.tree.node(name, declaration)</code></td><td>Makes a new node from a class name or any declaration.</td></tr>
+				<tr><td><code>roflux.tree.find(root, "A/B/C")</code></td><td>Finds a node by path, or <code>nil</code>.</td></tr>
+				<tr><td><code>roflux.tree.child(node, name)</code></td><td>Finds a direct child by name.</td></tr>
+				<tr><td><code>roflux.tree.each(root, fn)</code></td><td>Visits every node with its path. Safe to change the tree while visiting.</td></tr>
+				<tr><td><code>roflux.tree.add(parent, node)</code></td><td>Adds a child, replacing any child with the same name.</td></tr>
+				<tr><td><code>roflux.tree.remove(root, "A/B")</code></td><td>Removes a node and returns it.</td></tr>
+				<tr><td><code>roflux.tree.ensure(root, "A/B")</code></td><td>Finds a folder by path, creating any missing ones.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<div class="note warn">
+			<strong>Be careful with ownership</strong>
+			<p>A managed node owns its children, so RoFlux deletes anything inside it that the tree does not list. <code>ensure</code> creates passthrough folders on purpose, so it never deletes what is already in the place. If you set a service to <code>"managed"</code>, everything in that service that your project does not declare will be deleted from Studio.</p>
+		</div>
+		<p>Removing a managed node from the tree removes it from Studio on the next sync, just like deleting its file would.</p>
+
+		<h2 id="project">Project and settings</h2>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Function</th><th>Returns</th></tr></thead>
+			<tbody>
+				<tr><td><code>roflux.project()</code></td><td><code>{ name, id, root, manifest }</code></td></tr>
+				<tr><td><code>roflux.config(key?)</code></td><td>Your settings from the project file, or one of them.</td></tr>
+				<tr><td><code>roflux.env(name)</code></td><td>An environment variable, or <code>nil</code>.</td></tr>
+				<tr><td><code>roflux.platform()</code></td><td><code>"windows"</code>, <code>"linux"</code> or <code>"macos"</code>.</td></tr>
+				<tr><td><code>roflux.version()</code></td><td>The RoFlux version.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>Give your scripts settings with a <code>Scripts</code> block in the project file. Anything in it can be read with <code>roflux.config</code>:</p>
+<pre><code>{
+    <span class="tok-s">"ProjectID"</span>: <span class="tok-s">"MyGame"</span>,
+    <span class="tok-s">"Scripts"</span>: {
+        <span class="tok-s">"obfuscate"</span>: { <span class="tok-s">"enabled"</span>: <span class="tok-k">true</span> },
+        <span class="tok-s">"banner"</span>: <span class="tok-s">"built by RoFlux"</span>
+    }
+}</code></pre>
+<pre><code><span class="tok-k">local</span> settings = <span class="tok-k">roflux</span>.config(<span class="tok-s">"obfuscate"</span>) <span class="tok-k">or</span> {}
+
+<span class="tok-k">if</span> settings.enabled <span class="tok-k">then</span>
+	<span class="tok-c">-- ...</span>
+<span class="tok-k">end</span></code></pre>
+		<p>Editing the project file reloads every script, so new settings take effect straight away.</p>
+
+		<h2 id="exec">Running programs</h2>
+<pre><code><span class="tok-k">local</span> result = <span class="tok-k">roflux</span>.exec(<span class="tok-s">"stylua"</span>, { <span class="tok-s">"--check"</span>, <span class="tok-s">"src"</span> })
+
+<span class="tok-k">if</span> <span class="tok-k">not</span> result.ok <span class="tok-k">then</span>
+	<span class="tok-k">roflux</span>.warn(result.stdout)
+<span class="tok-k">end</span></code></pre>
+		<p><code>roflux.exec(program, args, options)</code> runs a program and waits for it. It returns <code>{ ok, code, stdout, stderr }</code>. Pass <code>{ cwd = "some/folder" }</code> as options to run it inside a project folder.</p>
+		<div class="note danger">
+			<strong>Off unless you turn it on</strong>
+			<p>Hook scripts run the moment someone starts <code>roflux serve</code>. If running programs were always allowed, opening a project you downloaded could run anything on your computer. So <code>exec</code> refuses to work until the project file says so:</p>
+		</div>
+<pre><code><span class="tok-s">"Scripts"</span>: { <span class="tok-s">"AllowExec"</span>: <span class="tok-k">true</span> }</code></pre>
+		<p>Only turn this on for projects you trust. A few more things to know:</p>
+		<ul>
+			<li>The program gets no input, so anything that waits for you to type will just stop waiting.</li>
+			<li>It runs during the build, so a slow program makes every save slow.</li>
+			<li>On Windows, commands built into the shell need <code>cmd</code>, as in <code>roflux.exec("cmd", { "/c", "dir" })</code>, and npm is <code>"npm.cmd"</code>.</li>
+		</ul>
+
+		<h2 id="cache">Cache</h2>
+		<p>A place to keep data between builds. It lives as long as the server does, and survives your scripts being reloaded, so it is the right place to remember expensive work.</p>
+		<div class="table-wrap">
+		<table>
+			<thead><tr><th>Function</th><th>What it does</th></tr></thead>
+			<tbody>
+				<tr><td><code>roflux.cache.get(key)</code></td><td>The stored value, or <code>nil</code>.</td></tr>
+				<tr><td><code>roflux.cache.set(key, value)</code></td><td>Stores a value. Setting <code>nil</code> removes it.</td></tr>
+				<tr><td><code>roflux.cache.has(key)</code></td><td>Whether something is stored.</td></tr>
+				<tr><td><code>roflux.cache.delete(key)</code></td><td>Removes it, and says whether it was there.</td></tr>
+				<tr><td><code>roflux.cache.clear()</code></td><td>Removes everything.</td></tr>
+				<tr><td><code>roflux.cache.keys()</code></td><td>Every key, sorted.</td></tr>
+			</tbody>
+		</table>
+		</div>
+		<p>Values must be plain data: text, numbers, booleans and tables of those. Functions cannot be stored. Everything is gone when the server stops.</p>
+
+		<h2 id="stdlib">Luau built ins</h2>
+		<p>Hook scripts also have Luau's own libraries: <code>string</code>, <code>table</code>, <code>math</code>, <code>utf8</code>, <code>bit32</code>, <code>buffer</code> and <code>os</code>. From <code>os</code> you get <code>os.time()</code>, <code>os.date()</code> and <code>os.clock()</code>, which is all you need for timestamps.</p>
+		<p>All scripts in <code>scripts/</code> share one Luau runtime and load in name order. <code>require</code> does not work here, but an earlier script can leave helpers in a global table for later ones to use.</p>
+
+		<h2 id="examples">Examples</h2>
+		<h3>Generate a module from data files</h3>
+<pre><code><span class="tok-k">roflux</span>.onTree(<span class="tok-k">function</span>(root)
+	<span class="tok-k">local</span> levels = {}
+
+	<span class="tok-k">for</span> _, file <span class="tok-k">in</span> <span class="tok-k">roflux</span>.fs.glob(<span class="tok-s">"data/levels/*.json"</span>) <span class="tok-k">do</span>
+		levels[<span class="tok-k">roflux</span>.path.stem(file)] = <span class="tok-k">roflux</span>.json(file)
+	<span class="tok-k">end</span>
+
+	<span class="tok-k">local</span> shared = <span class="tok-k">roflux</span>.tree.ensure(root, <span class="tok-s">"ReplicatedStorage/Generated"</span>)
+
+	<span class="tok-k">roflux</span>.tree.add(shared, <span class="tok-k">roflux</span>.tree.node(<span class="tok-s">"Levels"</span>, <span class="tok-k">roflux</span>.new(<span class="tok-s">"ModuleScript"</span>, {
+		Source = <span class="tok-k">roflux</span>.luau.module(levels),
+	})))
+<span class="tok-k">end</span>)</code></pre>
+		<p>The data folder does not need to be part of the tree at all. Because it is inside the project, saving any level file rebuilds and updates the module in Studio.</p>
+
+		<h3>Stamp every script in release builds</h3>
+<pre><code><span class="tok-k">local</span> release = <span class="tok-k">roflux</span>.env(<span class="tok-s">"RELEASE"</span>) ~= <span class="tok-k">nil</span>
+
+<span class="tok-k">roflux</span>.onTransfer(<span class="tok-k">function</span>(file)
+	<span class="tok-k">if</span> <span class="tok-k">not</span> release <span class="tok-k">then</span>
+		<span class="tok-k">return</span> <span class="tok-k">nil</span>
+	<span class="tok-k">end</span>
+
+	<span class="tok-k">return</span> `-- {<span class="tok-k">roflux</span>.project().name} {os.date(<span class="tok-s">"%Y-%m-%d"</span>)}\n` .. file.source
+<span class="tok-k">end</span>)</code></pre>
+
+		<h3>Skip work that has not changed</h3>
+<pre><code><span class="tok-k">roflux</span>.onTransfer(<span class="tok-k">function</span>(file)
+	<span class="tok-k">local</span> key = <span class="tok-s">"minified:"</span> .. <span class="tok-k">roflux</span>.hash(file.source)
+	<span class="tok-k">local</span> done = <span class="tok-k">roflux</span>.cache.get(key)
+
+	<span class="tok-k">if</span> done <span class="tok-k">then</span>
+		<span class="tok-k">return</span> done
+	<span class="tok-k">end</span>
+
+	<span class="tok-k">local</span> result = minify(file.source)
+	<span class="tok-k">roflux</span>.cache.set(key, result)
+	<span class="tok-k">return</span> result
+<span class="tok-k">end</span>)</code></pre>
+
+		<h3>Report every sync to a log file</h3>
+<pre><code><span class="tok-k">roflux</span>.onSync(<span class="tok-k">function</span>(info)
+	<span class="tok-k">roflux</span>.fs.append(<span class="tok-s">"logs/sync.log"</span>, os.date(<span class="tok-s">"%H:%M:%S "</span>) .. info.summary .. <span class="tok-s">"\n"</span>)
+<span class="tok-k">end</span>)</code></pre>
+		<p>Put the log folder somewhere that is not part of your tree. Writing into the project still wakes the watcher, but nothing in the tree changes, so it will not sync again.</p>
+
+		<div class="pager">
+			<a href="scripts.html">&larr; Script system</a>
+			<a href="types.html">Value types &rarr;</a>
+		</div>
+	</main>
+</div>
+
+<footer>
+	<div class="wrap">
+		<div class="foot-grid">
+			<div>
+				<h6>Documentation</h6>
+				<a href="getting-started.html">Getting started</a>
+				<a href="project.html">Project format</a>
+				<a href="syncing.html">How syncing works</a>
+			</div>
+			<div>
+				<h6>Reference</h6>
+				<a href="scripts.html">Script system</a>
+				<a href="script-api.html">Script API</a>
+				<a href="types.html">Value types</a>
+				<a href="cli.html">CLI commands</a>
+				<a href="edge-cases.html">Edge cases</a>
+			</div>
+			<div>
+				<h6>Project</h6>
+				<a href="index.html">Home</a>
+			</div>
+		</div>
+		<p class="foot-note">RoFlux syncs one way, from your editor into Roblox Studio.</p>
+	</div>
+</footer>
+
+</body>
+</html>

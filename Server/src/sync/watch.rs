@@ -200,6 +200,18 @@ async fn apply(shared: &Arc<Shared>, root: &Path, batch: &[Change]) {
         log::detail(&line);
     }
 
+    build.hooks.emit(
+        "sync",
+        &serde_json::json!({
+            "added": patch.added(),
+            "updated": patch.updated(),
+            "removed": patch.removed(),
+            "summary": patch.summary(),
+            "lines": patch.lines(500),
+            "clients": shared.connected(),
+        }),
+    );
+
     drop(build);
 
     shared.broadcast_patch(patch).await;

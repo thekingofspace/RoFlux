@@ -1,8 +1,8 @@
-use std::path::PathBuf;
-
-use mlua::{Function, Lua, Result, Table, Value};
+use mlua::{Function, Lua, LuaSerdeExt, Result, Table, Value};
 
 use crate::log;
+
+use super::Setup;
 
 pub const EVENTS: &[&str] = &[
     "read",
@@ -12,6 +12,7 @@ pub const EVENTS: &[&str] = &[
     "changed",
     "compile",
     "sync",
+    "tree",
 ];
 
 pub fn state(lua: &Lua) -> Result<Table> {
@@ -45,7 +46,28 @@ fn describe(values: &[Value]) -> String {
         .join(" ")
 }
 
-pub fn install(lua: &Lua, root: PathBuf) -> Result<()> {
+fn node(lua: &Lua, name: String, declaration: Value) -> Result<Value> {
+    let decoded: serde_json::Value = match declaration {
+        Value::Nil => serde_json::json!({}),
+        Value::String(class) => serde_json::json!({ "$ClassName": class.to_string_lossy().to_string() }),
+        other => lua.from_value(other)?,
+    };
+
+    let parsed = crate::project::meta::parse(&decoded, "roflux.tree.node");
+    let class_name = parsed.class_name.clone().unwrap_or_else(|| "Folder".into());
+    let mut built = crate::ir::Node::new("", name, class_name);
+    crate::project::scan::apply_declaration(&mut built, &parsed);
+
+    let value = lua.to_value(&built)?;
+
+    if let Value::Table(table) = &value {
+        super::fill(lua, table)?;
+    }
+
+    Ok(value)
+}
+
+pub fn install(lua: &Lua, setup: &Setup) -> Result<()> {
     let state = lua.create_table()?;
     let events = lua.create_table()?;
 
@@ -56,7 +78,6 @@ pub fn install(lua: &Lua, root: PathBuf) -> Result<()> {
     state.set("events", events)?;
     state.set("transpilers", lua.create_table()?)?;
     state.set("pending", lua.create_table()?)?;
-    state.set("source", lua.create_table()?)?;
 
     lua.set_named_registry_value("roflux.state", &state)?;
 
@@ -65,9 +86,8 @@ pub fn install(lua: &Lua, root: PathBuf) -> Result<()> {
     roflux.set(
         "on",
         lua.create_function(|lua, (event, callback): (String, Function)| {
-            let list = listeners(lua, &event).map_err(|_| {
-                mlua::Error::runtime(format!("unknown event \"{event}\""))
-            })?;
+            let list = listeners(lua, &event)
+                .map_err(|_| mlua::Error::runtime(format!("unknown event \"{event}\"")))?;
 
             list.push(callback)?;
             Ok(())
@@ -121,7 +141,26 @@ pub fn install(lua: &Lua, root: PathBuf) -> Result<()> {
         })?,
     )?;
 
-    super::files::install(lua, &roflux, root)?;
+    roflux.set(
+        "error",
+        lua.create_function(|_, values: mlua::MultiValue| {
+            log::fail(describe(&values.into_vec()));
+            Ok(())
+        })?,
+    )?;
+
+    let tree = lua.create_table()?;
+
+    tree.set(
+        "node",
+        lua.create_function(|lua, (name, declaration): (String, Value)| node(lua, name, declaration))?,
+    )?;
+
+    roflux.set("tree", tree)?;
+
+    super::files::install(lua, &roflux, setup.root.clone())?;
+    super::data::install(lua, &roflux, setup.root.clone())?;
+    super::system::install(lua, &roflux, setup)?;
 
     lua.globals().set("roflux", roflux)?;
 

@@ -11,7 +11,7 @@ local Vision = require(script.Parent.Parent.Vision)
 
 local App = {}
 
-local Version = "0.0.1"
+local Version = "0.0.2"
 local Wordmark = "rbxassetid://98759728108909"
 local WordmarkOffset = Vector2.new(70, 61)
 local WordmarkSize = Vector2.new(676, 168)

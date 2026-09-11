@@ -17,6 +17,7 @@ pub struct Config {
     pub services: Vec<(String, Meta)>,
     pub include: Vec<String>,
     pub exclude: Vec<String>,
+    pub scripts: Value,
 }
 
 pub struct Scanner<'a> {
@@ -65,6 +66,7 @@ pub fn config_from(root: &Path, manifest: &str) -> Result<Config> {
             services: Vec::new(),
             include: Vec::new(),
             exclude: Vec::new(),
+            scripts: Value::Null,
         });
     }
 
@@ -88,8 +90,9 @@ pub fn config_from(root: &Path, manifest: &str) -> Result<Config> {
 
     let include = names(&object, "Include");
     let exclude = names(&object, "Exclude");
+    let scripts = object.get("Scripts").cloned().unwrap_or(Value::Null);
 
-    let reserved = ["ProjectID", "Default", "Name", "Include", "Exclude"];
+    let reserved = ["ProjectID", "Default", "Name", "Include", "Exclude", "Scripts"];
 
     for (key, entry) in &object {
         if key.starts_with('$') || reserved.contains(&key.as_str()) {
@@ -114,6 +117,7 @@ pub fn config_from(root: &Path, manifest: &str) -> Result<Config> {
         services,
         include,
         exclude,
+        scripts,
     })
 }
 

@@ -32,6 +32,7 @@
 		<a href="syncing.html">How syncing works</a>
 		<a href="scripts.html" class="active">Script system</a>
 		<h5>Reference</h5>
+		<a href="script-api.html">Script API</a>
 		<a href="types.html">Value types</a>
 		<a href="cli.html">CLI commands</a>
 		<a href="edge-cases.html">Edge cases</a>
@@ -198,42 +199,8 @@ sync <span class="tok-a">+0 ~0 -2</span>
 		<p>These run before the rebuild, so anything they write to disk is picked up by the compile that follows.</p>
 
 		<h2 id="api">Full API</h2>
-		<h3>The file table</h3>
-		<div class="table-wrap">
-		<table>
-			<thead><tr><th>Field</th><th>Meaning</th></tr></thead>
-			<tbody>
-				<tr><td><code>file.path</code></td><td>Path relative to the project root, using forward slashes.</td></tr>
-				<tr><td><code>file.name</code></td><td>Just the file name.</td></tr>
-				<tr><td><code>file.extension</code></td><td>Lowercase extension, with no dot.</td></tr>
-				<tr><td><code>file.source</code></td><td>Current source. Source hooks change this.</td></tr>
-				<tr><td><code>file.text</code></td><td>Original contents, as read from disk.</td></tr>
-				<tr><td><code>file.className</code></td><td>Class the file is about to become, on source hooks.</td></tr>
-			</tbody>
-		</table>
-		</div>
-		<h3>Functions</h3>
-		<div class="table-wrap">
-		<table>
-			<thead><tr><th>Function</th><th>What it does</th></tr></thead>
-			<tbody>
-				<tr><td><code>roflux.on(event, fn)</code></td><td>Register by event name. Same as the named helpers below.</td></tr>
-				<tr><td><code>roflux.onRead(fn)</code></td><td>Source was read.</td></tr>
-				<tr><td><code>roflux.onTransfer(fn)</code></td><td>Source is about to go to Roblox.</td></tr>
-				<tr><td><code>roflux.onAdded(fn)</code></td><td>File added.</td></tr>
-				<tr><td><code>roflux.onRemoved(fn)</code></td><td>File removed.</td></tr>
-				<tr><td><code>roflux.onChanged(fn)</code></td><td>File changed.</td></tr>
-				<tr><td><code>roflux.onCompile(fn)</code></td><td>Reserved for compile lifecycle work.</td></tr>
-				<tr><td><code>roflux.onSync(fn)</code></td><td>Reserved for sync lifecycle work.</td></tr>
-				<tr><td><code>roflux.transpile(ext, fn)</code></td><td>Claim a file extension.</td></tr>
-				<tr><td><code>roflux.defer(fn)</code></td><td>Run something on the next pass.</td></tr>
-				<tr><td><code>roflux.log(...)</code></td><td>Print through the server logger.</td></tr>
-				<tr><td><code>roflux.warn(...)</code></td><td>Print as a warning.</td></tr>
-				<tr><td><code>roflux.read</code>, <code>json</code>, <code>list</code>, <code>walk</code>, <code>exists</code>, <code>isDirectory</code>, <code>root</code></td><td>Reading files, described above.</td></tr>
-			</tbody>
-		</table>
-		</div>
-		<p>The generated <code>types.d.luau</code> declares all of this, so hook scripts get autocomplete and type checking in your editor.</p>
+		<p>Scripts can do a lot more than what is shown here. They can write files, read JSON and TOML, generate Luau, build instances with <code>roflux.new</code>, change the finished tree with <code>roflux.onTree</code>, keep a cache between builds, read settings from the project file, and more.</p>
+		<p>All of it is listed on the <a href="script-api.html">Script API</a> page. The generated <code>types.d.luau</code> declares every function too, so hook scripts get autocomplete and type checking in your editor.</p>
 
 		<h2 id="examples">Examples</h2>
 		<h3>Strip debug calls from a release build</h3>
@@ -287,7 +254,7 @@ sync <span class="tok-a">+0 ~0 -2</span>
 
 		<div class="pager">
 			<a href="syncing.html">&larr; How syncing works</a>
-			<a href="types.html">Value types &rarr;</a>
+			<a href="script-api.html">Script API &rarr;</a>
 		</div>
 	</main>
 </div>
@@ -304,6 +271,7 @@ sync <span class="tok-a">+0 ~0 -2</span>
 			<div>
 				<h6>Reference</h6>
 				<a href="scripts.html">Script system</a>
+				<a href="script-api.html">Script API</a>
 				<a href="types.html">Value types</a>
 				<a href="cli.html">CLI commands</a>
 				<a href="edge-cases.html">Edge cases</a>

@@ -1,6 +1,6 @@
 [package]
 name = "roflux"
-version = "0.1.0"
+version = "0.0.2"
 edition = "2021"
 
 [[bin]]
@@ -10,8 +10,10 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1"
 axum = { version = "0.8", features = ["ws"] }
+base64 = "0.23.1"
 clap = { version = "4", features = ["derive"] }
 futures-util = "0.3"
+globset = "0.4.20"
 include_dir = "0.7.4"
 mlua = { version = "0.11", features = ["luau", "vendored", "send", "serialize"] }
 notify = "8"
@@ -23,7 +25,9 @@ rbx_types = "3.1.0"
 rbx_xml = "3.0.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
+sha2 = "0.11.0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "signal"] }
+toml = "1.1.6"
 walkdir = "2"
 
 [target.'cfg(windows)'.dependencies]
