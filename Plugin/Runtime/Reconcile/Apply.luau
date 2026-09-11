@@ -332,6 +332,25 @@ function Apply.node(parent: Instance, node: Node, report: Report): Instance?
 	return instance
 end
 
+local function ghost(path: string, node: Node, report: Report)
+	for _, child in node.children or {} do
+		if child.ownership == "reference" then
+			continue
+		end
+
+		local inner = `{path}.{child.name}`
+
+		if child.ownership == "managed" then
+			note(report, "added", inner, child.className)
+			report.added += count(child)
+		else
+			note(report, "added", inner, "Folder")
+			report.added += 1
+			ghost(inner, child, report)
+		end
+	end
+end
+
 local function container(parent: Instance, node: Node, report: Report): Instance?
 	if parent == game then
 		local found = Resolve.find(node.name)
@@ -349,10 +368,13 @@ local function container(parent: Instance, node: Node, report: Report): Instance
 		return found
 	end
 
-	note(report, "added", `{parent:GetFullName()}.{node.name}`, "Folder")
+	local path = `{parent:GetFullName()}.{node.name}`
+
+	note(report, "added", path, "Folder")
 	report.added += 1
 
 	if report.preview then
+		ghost(path, node, report)
 		return nil
 	end
 

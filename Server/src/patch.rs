@@ -115,27 +115,49 @@ impl Patch {
 
 pub fn diff(before: &Tree, after: &Tree) -> Patch {
     let mut patch = Patch::default();
-    walk(&before.root, &after.root, &mut patch);
+    walk(&root_view(&before.root), &root_view(&after.root), &mut patch);
     patch
 }
 
-fn walk(before: &Node, after: &Node, patch: &mut Patch) {
-    if after.ownership == Ownership::Reference {
-        return;
+pub fn view(node: &Node) -> Option<Node> {
+    let children: Vec<Node> = node.children.iter().filter_map(view).collect();
+
+    if node.ownership != Ownership::Reference {
+        return Some(Node {
+            id: node.id.clone(),
+            name: node.name.clone(),
+            class_name: node.class_name.clone(),
+            ownership: node.ownership,
+            properties: node.properties.clone(),
+            attributes: node.attributes.clone(),
+            tags: node.tags.clone(),
+            children,
+            file_paths: node.file_paths.clone(),
+        });
     }
 
+    if children.is_empty() {
+        return None;
+    }
+
+    let mut shell = Node::passthrough(node.id.clone(), node.name.clone(), node.class_name.clone());
+    shell.children = children;
+    Some(shell)
+}
+
+fn root_view(root: &Node) -> Node {
+    view(root).unwrap_or_else(|| Node::passthrough(root.id.clone(), root.name.clone(), root.class_name.clone()))
+}
+
+fn walk(before: &Node, after: &Node, patch: &mut Patch) {
     compare(before, after, patch);
 
     for child in &after.children {
-        if child.ownership == Ownership::Reference {
-            continue;
-        }
-
         match before.find_child(&child.name) {
             Some(existing) => walk(existing, child, patch),
             None => patch.ops.push(Op::Add {
                 parent: after.id.clone(),
-                node: strip(child),
+                node: child.clone(),
             }),
         }
     }
@@ -207,19 +229,8 @@ fn compare(before: &Node, after: &Node, patch: &mut Patch) {
     });
 }
 
-fn strip(node: &Node) -> Node {
-    let mut copy = node.clone();
-    copy.children.retain(|child| child.ownership != Ownership::Reference);
-
-    for child in &mut copy.children {
-        *child = strip(child);
-    }
-
-    copy
-}
-
 pub fn syncable(tree: &Tree) -> Tree {
     Tree {
-        root: strip(&tree.root),
+        root: root_view(&tree.root),
     }
 }

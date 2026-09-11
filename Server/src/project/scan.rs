@@ -278,8 +278,10 @@ fn merge(target: &mut Node, incoming: Node) {
         target.class_name = incoming.class_name;
     }
 
-    if incoming.ownership == Ownership::Managed {
-        target.ownership = Ownership::Managed;
+    match (target.ownership, incoming.ownership) {
+        (_, Ownership::Managed) => target.ownership = Ownership::Managed,
+        (Ownership::Passthrough, Ownership::Reference) => target.ownership = Ownership::Reference,
+        _ => {}
     }
 
     for (key, value) in incoming.properties {

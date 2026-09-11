@@ -341,6 +341,7 @@ roflux build lobby --output Lobby.rbxl</code></pre>
 		<ul>
 			<li>It works at any depth. An <code>init.meta.json</code> deep inside your project can move its folder somewhere else entirely.</li>
 			<li>Any part of the path that does not exist yet is made as a <code>Folder</code>. RoFlux does not own those folders, so it will not delete other things you put in them.</li>
+			<li>The path can lead into something that already exists in the place, like a map you built or something declared with <code>$FromModel</code>. RoFlux looks for it there and only adds your thing inside. See <a href="#frommodel">Putting your own things inside</a>.</li>
 			<li>Without it, a folder at the top of the project goes to the <code>Default</code> from the project file. Anything deeper stays inside the folder it sits in on disk.</li>
 			<li>Changing it is a move. The new copy is made and the old one is deleted, even if you changed it while not connected. See <a href="syncing.html#deletion">Moving things</a>.</li>
 		</ul>
@@ -453,6 +454,15 @@ roflux build lobby --output Lobby.rbxl</code></pre>
     }
 ]</code></pre>
 		<p>The path is where it lives in the DataModel, <code>$ClassName</code> is its type, and children describe its shape. Declared children inherit the reference status, so they are equally untouched.</p>
+		<h3>Putting your own things inside</h3>
+		<p>You can still add things of your own to something declared with <code>$FromModel</code>. Point their <code>$Parent</code> into it:</p>
+<pre><code><span class="tok-c">-- meta.inst.json</span>
+[
+    { <span class="tok-s">"$FromModel"</span>: <span class="tok-s">"Workspace/Map"</span>, <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Model"</span> },
+    { <span class="tok-s">"$Name"</span>: <span class="tok-s">"Lamp"</span>, <span class="tok-s">"$ClassName"</span>: <span class="tok-s">"Part"</span>, <span class="tok-s">"$Parent"</span>: <span class="tok-s">"Workspace/Map"</span> }
+]</code></pre>
+		<p>The lamp is yours, so it is created, updated and deleted like anything else. The map is still not yours. RoFlux uses it only as a place to look for the lamp, and never changes its properties, attributes, tags or anything else inside it. The order of the entries does not matter, and the same works from any <code>.inst.json</code> or <code>init.meta.json</code> in the project.</p>
+		<p>If the map is missing from the place, a plain <code>Folder</code> with its name is made to hold your things, the same as any other part of a <code>$Parent</code> path that does not exist yet.</p>
 
 		<h2 id="path">$Path</h2>
 		<p><code>$Path</code> says which file or folder should be inserted at that point. The file becomes the instance, and the key it is declared under becomes its name.</p>

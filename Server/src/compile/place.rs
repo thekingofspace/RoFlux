@@ -249,13 +249,10 @@ fn instance(node: &Node) -> InstanceBuilder {
 }
 
 pub fn dom(tree: &Tree) -> WeakDom {
-    let mut root = InstanceBuilder::new("DataModel").with_name(tree.root.name.clone());
+    let synced = crate::patch::syncable(tree);
+    let mut root = InstanceBuilder::new("DataModel").with_name(synced.root.name.clone());
 
-    for child in &tree.root.children {
-        if child.ownership == Ownership::Reference {
-            continue;
-        }
-
+    for child in &synced.root.children {
         root = root.with_child(instance(child));
     }
 
