@@ -49,6 +49,16 @@ local function server(plugin: Plugin)
 
 	local gameSession = HttpService:GenerateGUID(false)
 	local ended = false
+	local started = false
+	local early: { { [string]: any } } = {}
+
+	local function send(entry: { [string]: any })
+		if started then
+			Relay.push(entry)
+		else
+			table.insert(early, entry)
+		end
+	end
 
 	Relay.target(url)
 
@@ -76,7 +86,7 @@ local function server(plugin: Plugin)
 	end
 
 	event.Event:Connect(function(...)
-		Relay.push(stamp({ kind = "gameEvent", args = Encode.tuple(...) }, "server"))
+		send(stamp({ kind = "gameEvent", args = Encode.tuple(...) }, "server"))
 	end)
 
 	remote.OnServerEvent:Connect(function(_, batch)
@@ -86,13 +96,13 @@ local function server(plugin: Plugin)
 
 		for _, entry in batch do
 			if type(entry) == "table" and (entry.kind == "gameEvent" or entry.kind == "log") then
-				Relay.push(stamp(entry, "client"))
+				send(stamp(entry, "client"))
 			end
 		end
 	end)
 
 	LogService.MessageOut:Connect(function(message, kind)
-		Relay.push(stamp({ kind = "log", message = message, level = level(kind) }, "server"))
+		send(stamp({ kind = "log", message = message, level = level(kind) }, "server"))
 	end)
 
 	event.Parent = ReplicatedStorage
@@ -130,6 +140,13 @@ local function server(plugin: Plugin)
 	end)
 
 	Relay.push({ kind = "gameStart", session = session, gameSession = gameSession })
+	started = true
+
+	for _, entry in early do
+		Relay.push(entry)
+	end
+
+	table.clear(early)
 
 	local function finish()
 		if ended then
