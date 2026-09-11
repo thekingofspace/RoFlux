@@ -6,7 +6,7 @@ receives.
 ## Quick start
 
 ```
-cargo build --release --manifest-path Server/Cargo.toml   # build the server
+rokit add --global thekingofspace/RoFlux roflux           # install the server
 roflux plugin                                             # install the Studio plugin
 roflux init MyGame                                        # set up a project
 roflux serve MyGame                                       # start syncing
@@ -61,17 +61,19 @@ Full docs are at [thekingofspace.github.io/RoFlux](https://thekingofspace.github
 
 ## Building releases
 
-The **Build** workflow in Actions builds both platforms on demand. Run it from the Actions tab,
-optionally giving it a version label, and it produces one artifact holding everything:
+The **Build** workflow in Actions builds both platforms on demand. Run it from the Actions tab.
+It names the files with the version from `Server/Cargo.toml`, or the version you type in:
 
 ```
-roflux-v0.1.0/
-├─ roflux-linux-x86_64
-├─ roflux-windows-x86_64.exe
+roflux-0.0.2/
+├─ roflux-0.0.2-linux-x86_64.zip
+├─ roflux-0.0.2-windows-x86_64.zip
 └─ RoFlux.rbxm
 ```
 
-Download that, then attach the files to a release.
+Download that, unzip it, and attach the three files to a GitHub release. Keep the zips as they
+are. Rokit only installs from zips named with the system and CPU, so this is what makes
+`rokit add --global thekingofspace/RoFlux roflux` work.
 
 ## Layout
 
