@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Label for the download, e.g. v0.1.0"
+        description: "Version for the file names, e.g. 0.0.2. Leave empty to use Server/Cargo.toml"
         required: false
         default: ""
 
 jobs:
   build:
-    name: ${{ matrix.label }}
+    name: ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -18,13 +18,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            label: linux
+            platform: linux-x86_64
             binary: roflux
-            output: roflux-linux-x86_64
           - os: windows-latest
-            label: windows
+            platform: windows-x86_64
             binary: roflux.exe
-            output: roflux-windows-x86_64.exe
 
     steps:
       - uses: actions/checkout@v4
@@ -38,29 +36,25 @@ jobs:
       - name: Build
         run: cargo build --release --manifest-path Server/Cargo.toml
 
+      - name: Check it runs
+        shell: bash
+        run: ./Server/target/release/${{ matrix.binary }} --version
+
       - name: Collect binary
         shell: bash
         run: |
-          mkdir -p staging
-          cp "Server/target/release/${{ matrix.binary }}" "staging/${{ matrix.output }}"
+          mkdir -p "staging/${{ matrix.platform }}"
+          cp "Server/target/release/${{ matrix.binary }}" "staging/${{ matrix.platform }}/"
 
       - name: Build the Studio plugin
-        if: matrix.label == 'linux'
+        if: matrix.platform == 'linux-x86_64'
         shell: bash
-        run: |
-          chmod +x staging/${{ matrix.output }}
-          ./staging/${{ matrix.output }} plugin --output staging/RoFlux.rbxm
-
-      - name: Check it runs
-        shell: bash
-        run: |
-          chmod +x staging/${{ matrix.output }} || true
-          ./staging/${{ matrix.output }} --version
+        run: ./Server/target/release/${{ matrix.binary }} plugin --output staging/RoFlux.rbxm
 
       - uses: actions/upload-artifact@v4
         with:
-          name: part-${{ matrix.label }}
-          path: staging/*
+          name: part-${{ matrix.platform }}
+          path: staging
           if-no-files-found: error
           retention-days: 7
 
@@ -70,27 +64,45 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
-          path: roflux
+          path: parts
           pattern: part-*
           merge-multiple: true
 
-      - name: Show what was built
-        run: ls -lh roflux
-
-      - name: Name the download
-        id: name
+      - name: Work out the version
+        id: version
         run: |
-          label="${{ inputs.version }}"
-          if [ -z "$label" ]; then
-            label="${GITHUB_SHA::7}"
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then
+            version=$(grep -m1 '^version' Server/Cargo.toml | cut -d '"' -f2)
           fi
-          echo "value=roflux-$label" >> "$GITHUB_OUTPUT"
+          echo "value=${version#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Zip each platform
+        run: |
+          version="${{ steps.version.outputs.value }}"
+          mkdir -p release
+          for folder in parts/*/; do
+            platform=$(basename "$folder")
+            chmod +x "$folder"/* || true
+            (cd "$folder" && zip -9 "../../release/roflux-$version-$platform.zip" *)
+          done
+          cp parts/RoFlux.rbxm release/
+
+      - name: Show what was built
+        run: |
+          ls -lh release
+          for archive in release/*.zip; do
+            echo "== $archive"
+            unzip -l "$archive"
+          done
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.name.outputs.value }}
-          path: roflux/*
+          name: roflux-${{ steps.version.outputs.value }}
+          path: release/*
           if-no-files-found: error
           retention-days: 30

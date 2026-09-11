@@ -52,8 +52,9 @@
 
 		<h2 id="build">Get the server</h2>
 		<p>The quickest way is <a href="https://github.com/rojo-rbx/rokit">Rokit</a>, which puts it on your <code>PATH</code> for you:</p>
-<pre><code>rokit install thekingofspace/RoFlux roflux</code></pre>
-		<p>You can also download a binary from the releases page and put it somewhere on your <code>PATH</code>.</p>
+<pre><code>rokit add --global thekingofspace/RoFlux roflux</code></pre>
+		<p>That makes <code>roflux</code> work from any folder. To pin a version for one project instead, run it inside the project without <code>--global</code>. That writes it into the project's <code>rokit.toml</code>, and anyone who clones the project gets the same version with <code>rokit install</code>.</p>
+		<p>You can also download the zip for your system from the releases page, unzip it, and put <code>roflux</code> somewhere on your <code>PATH</code>.</p>
 
 		<h3>Building it yourself</h3>
 		<p>RoFlux is a Rust program. You need a Rust toolchain, and a C++ compiler because the Luau runtime used by the script system is built from source.</p>
